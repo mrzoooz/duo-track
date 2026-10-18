@@ -11,11 +11,13 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+from http.cookiejar import CookieJar
 from zoneinfo import ZoneInfo
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -186,14 +188,23 @@ def diagnose(cfg):
     except Exception as e:
         log(f"product page fetch failed: {e}")
     part = cfg["parts"][0]
-    for params in ([("parts.0", part), ("location", "92626")],
-                   [("parts.0", part), ("store", "R004")],
-                   [("parts.0", part), ("cppart", "TMOBILE/US"), ("location", "92626")],
-                   [("parts.0", part), ("cppart", "UNLOCKED/US"), ("location", "92626")],
-                   [("parts.0", part), ("cppart", "TMOBILE/US"), ("store", "R004")],
-                   [("parts.0", f"{part}+tmobile"), ("location", "92626")],
-                   [("parts.0", "MHJA3AM/A"), ("location", "92626")]):  # control: 20W USB-C adapter
-        probe(cfg, params)
+    session = make_session(cfg)
+    xhr = {"X-Requested-With": "XMLHttpRequest"}
+    aos = {"x-aos-ui-fetch-call-1": "a1b2c3d4e5", "x-skip-redirect": "true", **xhr}
+    for opener, cp, where, hdrs, label in (
+            (None, None, ("location", "92626"), {}, "plain"),
+            (session, None, ("location", "92626"), {}, "cookies"),
+            (session, "TMOBILE_IPHONEDUO", ("location", "92626"), {}, "cookies"),
+            (session, "TMOBILE_IPHONEDUO", ("store", "R004"), {}, "cookies"),
+            (session, "UNLOCKED/US", ("store", "R004"), {}, "cookies"),
+            (session, "TMOBILE_IPHONEDUO", ("store", "R004"), xhr, "cookies+xhr"),
+            (session, "TMOBILE_IPHONEDUO", ("store", "R004"), aos, "cookies+aos"),
+            (None, "TMOBILE_IPHONEDUO", ("store", "R004"), aos, "plain+aos")):
+        params = [("parts.0", part)] + ([("cppart", cp)] if cp else []) + [where]
+        probe(cfg, params, opener=opener, headers=hdrs, label=label)
+    for control in ("MX6X3AM/A", "MX532AM/A"):  # MagSafe charger, AirTag
+        probe(cfg, [("parts.0", control), ("store", "R004")], opener=session, label="control")
+    probe_curl(cfg, [("parts.0", part), ("cppart", "TMOBILE_IPHONEDUO"), ("store", "R004")])
     try:
         results, seen = check(cfg)
     except Exception as e:
@@ -214,23 +225,61 @@ def diagnose(cfg):
     log(summarize(results))
 
 
-def probe(cfg, params):
+def make_session(cfg):
+    """Opener that carries the cookies a browser gets from loading the product page."""
+    jar = CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    opener.addheaders = [("User-Agent", UA), ("Accept-Language", "en-US,en;q=0.9")]
+    try:
+        opener.open(cfg["product_url"], timeout=20).read()
+        log(f"session cookies: {sorted(c.name for c in jar)}")
+    except Exception as e:
+        log(f"session warmup failed: {e}")
+    return opener
+
+
+def probe_url(params):
     q = [("fae", "true"), ("pl", "true"), ("mts.0", "regular"), ("mts.1", "compact"),
          ("searchNearby", "true")] + params
+    return f"{FULFILLMENT_URL}?{urllib.parse.urlencode(q)}"
+
+
+def describe(body):
+    pm = json.loads(body)["body"]["content"]["pickupMessage"]
+    stores = [(s.get("storeNumber"), s.get("storeName"),
+               {p: (i.get("pickupDisplay"), strip_html(i.get("pickupSearchQuote")))
+                for p, i in s.get("partsAvailability", {}).items()})
+              for s in pm.get("stores", [])]
+    extra = {k: v for k, v in pm.items() if k != "stores" and isinstance(v, (str, bool, int))}
+    return f"OK {len(stores)} stores {stores} meta={extra}"
+
+
+def probe(cfg, params, opener=None, headers=None, label=""):
+    req = urllib.request.Request(probe_url(params), headers={
+        "User-Agent": UA, "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Referer": cfg["product_url"], **(headers or {})})
     try:
-        body = http(f"{FULFILLMENT_URL}?{urllib.parse.urlencode(q)}",
-                    headers={"Accept": "application/json", "Referer": cfg["product_url"]})
-        pm = json.loads(body)["body"]["content"]["pickupMessage"]
-        stores = [(s.get("storeNumber"), s.get("storeName"),
-                   {p: (i.get("pickupDisplay"), strip_html(i.get("pickupSearchQuote")))
-                    for p, i in s.get("partsAvailability", {}).items()})
-                  for s in pm.get("stores", [])]
-        extra = {k: v for k, v in pm.items() if k != "stores" and isinstance(v, (str, bool, int))}
-        log(f"probe {params}: OK {len(stores)} stores {stores} meta={extra}")
+        with (opener.open if opener else urllib.request.urlopen)(req, timeout=20) as resp:
+            log(f"probe[{label}] {params}: {describe(resp.read().decode())}")
     except urllib.error.HTTPError as e:
-        log(f"probe {params}: HTTP {e.code} {e.read()[:200]!r}")
+        log(f"probe[{label}] {params}: HTTP {e.code} server={e.headers.get('Server')} {e.read()[:80]!r}")
     except Exception as e:
-        log(f"probe {params}: {e!r}")
+        log(f"probe[{label}] {params}: {e!r}")
+
+
+def probe_curl(cfg, params):
+    """Same request via curl (different TLS fingerprint), with a cookie jar warmed on the product page."""
+    jar = "/tmp/duo-track-cookies.txt"
+    base = ["curl", "-sS", "--compressed", "-c", jar, "-b", jar, "-A", UA, "-H", "Accept-Language: en-US,en;q=0.9"]
+    try:
+        subprocess.run(base + ["-o", "/dev/null", cfg["product_url"]], check=True, timeout=30)
+        out = subprocess.run(base + ["-w", "\n%{http_code}", "-H", "Accept: application/json",
+                                     "-e", cfg["product_url"], probe_url(params)],
+                             capture_output=True, text=True, timeout=30).stdout
+        body, code = out.rsplit("\n", 1)
+        log(f"probe[curl] {params}: HTTP {code} " + (describe(body) if code == "200" else repr(body[:80])))
+    except Exception as e:
+        log(f"probe[curl] {params}: {e!r}")
 
 
 def seen_number(seen, want):
