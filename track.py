@@ -204,28 +204,31 @@ def diagnose(cfg):
         probe(cfg, params, opener=opener, headers=hdrs, label=label)
     for control in ("MX6X3AM/A", "MX532AM/A"):  # MagSafe charger, AirTag
         probe(cfg, [("parts.0", control), ("store", "R004")], opener=session, label="control")
-    chrome = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
-                            "Chrome/140.0.0.0 Safari/537.36",
-              "sec-ch-ua": '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
-              "sec-ch-ua-mobile": "?0", "sec-ch-ua-platform": '"Windows"', "sec-fetch-dest": "empty",
-              "sec-fetch-mode": "cors", "sec-fetch-site": "same-origin", "Accept-Language": "en-US,en;q=0.9"}
-    for url in (
-            "https://www.apple.com/shop/fulfillment-messages?pl=true&mts.0=regular&parts.0=MX532AM/A&location=92626",
-            "https://www.apple.com/shop/fulfillment-messages?fae=true&little=false&parts.0=MX532AM/A&mts.0=regular&mts.1=sticky&fts=true",
-            "https://www.apple.com/shop/retail/pickup-message?pl=true&parts.0=MX532AM/A&location=92626",
-            "https://www.apple.com/shop/pickup-message-recommendations?mts.0=regular&location=92626&product=MX532AM/A",
-            "https://www.apple.com/shop/delivery-message?parts.0=MX532AM/A&mt=regular",
-            "https://www.apple.com/us-edu/shop/fulfillment-messages?fae=true&pl=true&mts.0=regular&parts.0=MX532AM/A&location=92626",
-            "https://www.apple.com/shop/address/geo-lookup?fae=true",
-            "https://www.apple.com/retail/southcoastplaza/"):
-        for name, hdrs in (("safari", {}), ("chrome", chrome)):
-            try:
-                body = http(url, headers={"Referer": cfg["product_url"], **hdrs})
-                log(f"url[{name}] {url}: 200 {len(body)}b {body[:160]!r}")
-            except urllib.error.HTTPError as e:
-                log(f"url[{name}] {url}: HTTP {e.code}")
-            except Exception as e:
-                log(f"url[{name}] {url}: {e!r}")
+    legacy = "https://www.apple.com/shop/retail/pickup-message"
+    for i, params in enumerate((
+            [("pl", "true"), ("parts.0", part), ("location", "92626")],
+            [("pl", "true"), ("parts.0", part), ("cppart", "TMOBILE_IPHONEDUO"), ("location", "92626")],
+            [("pl", "true"), ("parts.0", part), ("cppart", "TMOBILE_IPHONEDUO"), ("store", "R004"), ("searchNearby", "true")],
+            [("pl", "true"), ("mts.0", "regular"), ("parts.0", part), ("cppart", "TMOBILE_IPHONEDUO"), ("location", "92821")],
+            [("pl", "true"), ("parts.0", "MK1E4LL/A"), ("location", "92626")],
+            [("pl", "true"), ("parts.0", "MX6X3AM/A"), ("location", "92626")])):
+        url = f"{legacy}?{urllib.parse.urlencode(params)}"
+        try:
+            body = http(url, headers={"Accept": "application/json", "Referer": cfg["product_url"]})
+            data = json.loads(body).get("body", {})
+            stores = [(s.get("storeNumber"), s.get("storeName"),
+                       {p: (v.get("pickupDisplay"), strip_html(v.get("pickupSearchQuote")),
+                            v.get("storePickupProductTitle"))
+                        for p, v in s.get("partsAvailability", {}).items()})
+                      for s in data.get("stores", [])]
+            meta = {k: v for k, v in data.items() if k != "stores" and isinstance(v, (str, bool, int))}
+            log(f"legacy {params}: {len(stores)} stores {stores} meta={meta}")
+            if i == 0:
+                log(f"legacy raw: {body[:3000]}")
+        except urllib.error.HTTPError as e:
+            log(f"legacy {params}: HTTP {e.code}")
+        except Exception as e:
+            log(f"legacy {params}: {e!r}")
     try:
         results, seen = check(cfg)
     except Exception as e:
