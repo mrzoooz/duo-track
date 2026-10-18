@@ -17,7 +17,7 @@
     "Irvine Spectrum Center",
     "Brea Mall"
   ],
-  "start": "2026-01-01T00:00:00-08:00",
+  "start": "2099-01-01T00:00:00-08:00",
   "interval_seconds": 60,
   "renotify_minutes": 10,
   "error_alert_after": 15,
