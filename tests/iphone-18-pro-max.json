@@ -5,10 +5,19 @@
   "product_name": "iPhone 18 Pro Max 256GB Black (T-Mobile, Apple Upgrade)",
   "product_url": "https://www.apple.com/shop/buy-iphone/iphone-18-pro/6.9-inch-display-256gb-black-t-mobile-apple-upgrade",
   "checkout_reminder": "This is a test run; no need to order",
-  "part": "",
-  "extra_params": {},
-  "search_locations": ["92626"],
-  "stores": ["South Coast Plaza", "Fashion Island", "Irvine Spectrum Center", "Brea Mall"],
+  "part": "MJW44LL/A",
+  "extra_params": {
+    "cppart": "TMOBILE_IPHONE18PRO"
+  },
+  "search_locations": [
+    "92626"
+  ],
+  "stores": [
+    "South Coast Plaza",
+    "Fashion Island",
+    "Irvine Spectrum Center",
+    "Brea Mall"
+  ],
   "start": "2026-10-17T00:00:00-07:00",
   "interval_seconds": 60,
   "error_alert_after": 15,
