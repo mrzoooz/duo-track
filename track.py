@@ -171,7 +171,7 @@ class StatusBoard:
     def publish(self, results, error, checked_at):
         status = {
             "eyebrow": self.cfg.get("eyebrow", "Apple Store pickup tracker"),
-            "title": self.cfg.get("title", self.cfg["product_name"]),
+            "title": self.cfg["title"],
             "subtitle": self.cfg.get("subtitle", ""),
             "product": self.cfg["product_name"],
             "product_url": self.cfg["product_url"],
@@ -300,7 +300,7 @@ def poll(cfg, config, handoff_from, max_minutes):
             log(f"check failed ({failures} in a row): {error}")
             if failures == cfg["error_alert_after"]:
                 board.event(f"Apple checks failing ({error})")
-                alert(cfg, "iPhone Duo tracker can't reach Apple",
+                alert(cfg, f"{cfg.get('alert_prefix', '')}{cfg['title']} tracker can't reach Apple",
                       f"{failures} checks in a row failed ({error}). Check the Apple Store app manually "
                       "until this recovers.")
         if error is None:
@@ -309,7 +309,7 @@ def poll(cfg, config, handoff_from, max_minutes):
             if new:
                 where = ", ".join(sorted(new))
                 board.event(f"Pickup available: {where}")
-                alert(cfg, f"iPhone Duo pickup available: {where}",
+                alert(cfg, f"{cfg.get('alert_prefix', '')}{cfg['title']} pickup available: {where}",
                       f"{cfg['product_name']} shows in-store pickup at **{where}**.")
             if gone:
                 board.event(f"Pickup no longer showing: {', '.join(sorted(gone))}")
