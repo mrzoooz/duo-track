@@ -17,9 +17,9 @@
     "Irvine Spectrum Center",
     "Brea Mall"
   ],
-  "start": "2026-10-24T00:00:00-07:00",
+  "start": "2026-01-01T00:00:00-08:00",
   "interval_seconds": 60,
   "renotify_minutes": 10,
   "error_alert_after": 15,
-  "ntfy_topic": "duo-track-9a5emz0zmam2"
+  "ntfy_topic": "duo-track-selftest-q7k2m9x4"
 }

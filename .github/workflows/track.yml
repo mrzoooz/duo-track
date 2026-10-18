@@ -31,4 +31,4 @@ jobs:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           MODE: ${{ inputs.mode || 'poll' }}
           HANDOFF_FROM: ${{ inputs.handoff_from }}
-        run: python3 track.py --mode "$MODE" --max-minutes 340 --handoff-from "$HANDOFF_FROM"
+        run: python3 track.py --mode "$MODE" --max-minutes 2 --handoff-from "$HANDOFF_FROM"
