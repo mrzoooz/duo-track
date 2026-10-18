@@ -17,7 +17,10 @@ secret named `NTFY_TOPIC` with a new topic name and subscribe to that instead.
 
 ## How it runs
 
-`.github/workflows/track.yml` runs `track.py` on GitHub Actions (free for public repos).
+`.github/workflows/track.yml` runs `track.py` on GitHub Actions (free for public repos). It reads Apple's
+`/shop/retail/pickup-message` endpoint for part `MK1F4LL/A` with carrier `TMOBILE_IPHONEDUO` near 92626, which returns
+the same per-store "Pickup:" line the product page shows. The browser's `/shop/fulfillment-messages` endpoint answers
+HTTP 541 to GitHub's servers, so the tracker doesn't use it.
 
 - One run polls every 60s for ~5h40m, then starts its successor before GitHub's 6-hour job limit.
 - A schedule every 15 minutes acts as a watchdog. If no tracker is running, it starts one; otherwise it exits.

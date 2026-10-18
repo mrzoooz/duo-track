@@ -4,27 +4,27 @@
 Modes:
   poll         check every interval_seconds (default; waits for config "start")
   once         one check, print a summary, exit
-  diagnose     one check with raw details + what the product page advertises
+  diagnose     one check with per-store details
   test-notify  send a test notification, then one check
 """
 import argparse
 import json
 import os
 import re
-import subprocess
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
-from http.cookiejar import CookieJar
 from zoneinfo import ZoneInfo
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PT = ZoneInfo("America/Los_Angeles")
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
       "(KHTML, like Gecko) Version/18.0 Safari/605.1.15")
-FULFILLMENT_URL = "https://www.apple.com/shop/fulfillment-messages"
+# /shop/fulfillment-messages (what the browser uses) answers 541 to GitHub Actions IPs;
+# this older endpoint returns the same per-store pickup data.
+PICKUP_URL = "https://www.apple.com/shop/retail/pickup-message"
 WORKFLOW_FILE = "track.yml"
 IN_ACTIONS = os.environ.get("GITHUB_ACTIONS") == "true"
 
@@ -47,17 +47,20 @@ def strip_html(s):
 # --- Apple -------------------------------------------------------------------
 
 def fetch_stores(cfg, location):
-    q = [("fae", "true"), ("pl", "true"), ("mts.0", "regular"), ("mts.1", "compact"),
-         ("searchNearby", "true"), ("location", location)]
+    q = [("pl", "true"), ("location", location)]
     q += [(f"parts.{i}", p) for i, p in enumerate(cfg["parts"])]
     q += list(cfg.get("extra_params", {}).items())
-    body = http(f"{FULFILLMENT_URL}?{urllib.parse.urlencode(q)}",
-                headers={"Accept": "application/json", "Referer": cfg["product_url"]})
-    return json.loads(body)["body"]["content"]["pickupMessage"].get("stores", [])
+    body = json.loads(http(f"{PICKUP_URL}?{urllib.parse.urlencode(q)}",
+                           headers={"Accept": "application/json", "Referer": cfg["product_url"]}))["body"]
+    if "content" in body:  # fulfillment-messages shape
+        body = body["content"]["pickupMessage"]
+    if "stores" not in body:
+        raise ValueError(body.get("errorMessage") or "no stores in response")
+    return body["stores"]
 
 
 def check(cfg):
-    """Return {wanted store: {part: partsAvailability entry} or None if not found}."""
+    """Return ({wanted store: {part: partsAvailability entry} or None if not found}, {name: store})."""
     seen = {}
     for loc in cfg["search_locations"]:
         for s in fetch_stores(cfg, loc):
@@ -74,7 +77,8 @@ def check(cfg):
 
 
 def is_available(info):
-    return info.get("pickupDisplay") == "available"
+    quote = strip_html(info.get("pickupSearchQuote", ""))
+    return info.get("pickupDisplay") == "available" or quote.lower().startswith("available")
 
 
 def summarize(results):
@@ -83,7 +87,7 @@ def summarize(results):
         if parts is None:
             out.append(f"{store}: not in search results")
             continue
-        for part, info in parts.items():
+        for info in parts.values():
             status = info.get("pickupDisplay", "no data")
             quote = strip_html(info.get("pickupSearchQuote", ""))
             out.append(f"{store}: {status}" + (f" ({quote})" if quote else ""))
@@ -169,145 +173,19 @@ def dispatch_next_run():
 # --- Modes ---------------------------------------------------------------------
 
 def diagnose(cfg):
-    try:
-        page = http(cfg["product_url"])
-        title = re.search(r"<title>(.*?)</title>", page, re.S)
-        title = strip_html(title.group(1)) if title else "?"
-        skus = sorted(set(re.findall(r'"sku"\s*:\s*"([^"]+)"', page)))
-        parts = sorted(set(re.findall(r"\b[A-Z0-9]{5}LL/A\b", page)))
-        refs = sorted(set(re.findall(r"fulfillment-messages[^\"'\s<]{0,200}", page)))
-        log(f"product page: {len(page)} bytes, title={title}")
-        log(f"skus on page: {skus[:30]}")
-        log(f"part numbers on page: {parts[:60]}")
-        log(f"fulfillment refs: {refs[:10]}")
-        for m in re.finditer(r"[Cc]heck back[^<\"]{0,80}", page):
-            log(f"page text: {m.group(0)}")
-        for key in ("fulfillment-messages", "cppart", "purchaseOption", "option.0", "carrierModel", "pickup"):
-            for m in list(re.finditer(re.escape(key), page))[:4]:
-                log(f"context {key!r}: {page[max(0, m.start() - 250):m.end() + 250]!r}")
-    except Exception as e:
-        log(f"product page fetch failed: {e}")
-    part = cfg["parts"][0]
-    session = make_session(cfg)
-    xhr = {"X-Requested-With": "XMLHttpRequest"}
-    aos = {"x-aos-ui-fetch-call-1": "a1b2c3d4e5", "x-skip-redirect": "true", **xhr}
-    for opener, cp, where, hdrs, label in (
-            (None, None, ("location", "92626"), {}, "plain"),
-            (session, None, ("location", "92626"), {}, "cookies"),
-            (session, "TMOBILE_IPHONEDUO", ("location", "92626"), {}, "cookies"),
-            (session, "TMOBILE_IPHONEDUO", ("store", "R004"), {}, "cookies"),
-            (session, "UNLOCKED/US", ("store", "R004"), {}, "cookies"),
-            (session, "TMOBILE_IPHONEDUO", ("store", "R004"), xhr, "cookies+xhr"),
-            (session, "TMOBILE_IPHONEDUO", ("store", "R004"), aos, "cookies+aos"),
-            (None, "TMOBILE_IPHONEDUO", ("store", "R004"), aos, "plain+aos")):
-        params = [("parts.0", part)] + ([("cppart", cp)] if cp else []) + [where]
-        probe(cfg, params, opener=opener, headers=hdrs, label=label)
-    for control in ("MX6X3AM/A", "MX532AM/A"):  # MagSafe charger, AirTag
-        probe(cfg, [("parts.0", control), ("store", "R004")], opener=session, label="control")
-    legacy = "https://www.apple.com/shop/retail/pickup-message"
-    for i, params in enumerate((
-            [("pl", "true"), ("parts.0", part), ("location", "92626")],
-            [("pl", "true"), ("parts.0", part), ("cppart", "TMOBILE_IPHONEDUO"), ("location", "92626")],
-            [("pl", "true"), ("parts.0", part), ("cppart", "TMOBILE_IPHONEDUO"), ("store", "R004"), ("searchNearby", "true")],
-            [("pl", "true"), ("mts.0", "regular"), ("parts.0", part), ("cppart", "TMOBILE_IPHONEDUO"), ("location", "92821")],
-            [("pl", "true"), ("parts.0", "MK1E4LL/A"), ("location", "92626")],
-            [("pl", "true"), ("parts.0", "MX6X3AM/A"), ("location", "92626")])):
-        url = f"{legacy}?{urllib.parse.urlencode(params)}"
-        try:
-            body = http(url, headers={"Accept": "application/json", "Referer": cfg["product_url"]})
-            data = json.loads(body).get("body", {})
-            stores = [(s.get("storeNumber"), s.get("storeName"),
-                       {p: (v.get("pickupDisplay"), strip_html(v.get("pickupSearchQuote")),
-                            v.get("storePickupProductTitle"))
-                        for p, v in s.get("partsAvailability", {}).items()})
-                      for s in data.get("stores", [])]
-            meta = {k: v for k, v in data.items() if k != "stores" and isinstance(v, (str, bool, int))}
-            log(f"legacy {params}: {len(stores)} stores {stores} meta={meta}")
-            if i == 0:
-                log(f"legacy raw: {body[:3000]}")
-        except urllib.error.HTTPError as e:
-            log(f"legacy {params}: HTTP {e.code}")
-        except Exception as e:
-            log(f"legacy {params}: {e!r}")
-    try:
-        results, seen = check(cfg)
-    except Exception as e:
-        log(f"configured check failed: {e}")
-        return
+    results, seen = check(cfg)
     log(f"stores returned: {sorted(seen)}")
-    for store, parts in results.items():
+    for want, parts in results.items():
         if parts is None:
-            log(f"{store}: NOT FOUND")
+            log(f"{want}: NOT FOUND")
             continue
+        number = next(s.get("storeNumber") for name, s in seen.items() if want.lower() in name.lower())
         for part, info in parts.items():
-            keep = {k: info.get(k) for k in ("pickupDisplay", "pickupSearchQuote", "storePickEligible",
-                                             "purchaseOption", "buyability")}
             msg = info.get("messageTypes", {}).get("regular", {})
-            keep["product"] = msg.get("storePickupProductTitle")
-            keep["quote"] = msg.get("storePickupQuote")
-            log(f"{store} [{seen_number(seen, store)}] {part}: {json.dumps(keep)}")
+            log(f"{want} [{number}] {part} '{msg.get('storePickupProductTitle')}': "
+                f"pickupDisplay={info.get('pickupDisplay')} quote={strip_html(info.get('pickupSearchQuote'))!r} "
+                f"eligible={info.get('storePickEligible')} available={is_available(info)}")
     log(summarize(results))
-
-
-def make_session(cfg):
-    """Opener that carries the cookies a browser gets from loading the product page."""
-    jar = CookieJar()
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
-    opener.addheaders = [("User-Agent", UA), ("Accept-Language", "en-US,en;q=0.9")]
-    try:
-        opener.open(cfg["product_url"], timeout=20).read()
-        log(f"session cookies: {sorted(c.name for c in jar)}")
-    except Exception as e:
-        log(f"session warmup failed: {e}")
-    return opener
-
-
-def probe_url(params):
-    q = [("fae", "true"), ("pl", "true"), ("mts.0", "regular"), ("mts.1", "compact"),
-         ("searchNearby", "true")] + params
-    return f"{FULFILLMENT_URL}?{urllib.parse.urlencode(q)}"
-
-
-def describe(body):
-    pm = json.loads(body)["body"]["content"]["pickupMessage"]
-    stores = [(s.get("storeNumber"), s.get("storeName"),
-               {p: (i.get("pickupDisplay"), strip_html(i.get("pickupSearchQuote")))
-                for p, i in s.get("partsAvailability", {}).items()})
-              for s in pm.get("stores", [])]
-    extra = {k: v for k, v in pm.items() if k != "stores" and isinstance(v, (str, bool, int))}
-    return f"OK {len(stores)} stores {stores} meta={extra}"
-
-
-def probe(cfg, params, opener=None, headers=None, label=""):
-    req = urllib.request.Request(probe_url(params), headers={
-        "User-Agent": UA, "Accept": "application/json, text/javascript, */*; q=0.01",
-        "Referer": cfg["product_url"], **(headers or {})})
-    try:
-        with (opener.open if opener else urllib.request.urlopen)(req, timeout=20) as resp:
-            log(f"probe[{label}] {params}: {describe(resp.read().decode())}")
-    except urllib.error.HTTPError as e:
-        log(f"probe[{label}] {params}: HTTP {e.code} server={e.headers.get('Server')} {e.read()[:80]!r}")
-    except Exception as e:
-        log(f"probe[{label}] {params}: {e!r}")
-
-
-def probe_curl(cfg, params):
-    """Same request via curl (different TLS fingerprint), with a cookie jar warmed on the product page."""
-    jar = "/tmp/duo-track-cookies.txt"
-    base = ["curl", "-sS", "--compressed", "-c", jar, "-b", jar, "-A", UA, "-H", "Accept-Language: en-US,en;q=0.9"]
-    try:
-        subprocess.run(base + ["-o", "/dev/null", cfg["product_url"]], check=True, timeout=30)
-        out = subprocess.run(base + ["-w", "\n%{http_code}", "-H", "Accept: application/json",
-                                     "-e", cfg["product_url"], probe_url(params)],
-                             capture_output=True, text=True, timeout=30).stdout
-        body, code = out.rsplit("\n", 1)
-        log(f"probe[curl] {params}: HTTP {code} " + (describe(body) if code == "200" else repr(body[:80])))
-    except Exception as e:
-        log(f"probe[curl] {params}: {e!r}")
-
-
-def seen_number(seen, want):
-    return next((s.get("storeNumber") for name, s in seen.items() if want.lower() in name.lower()), "?")
 
 
 def poll(cfg, handoff_from, max_minutes):
