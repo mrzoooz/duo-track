@@ -16,7 +16,8 @@
     "South Coast Plaza",
     "Fashion Island",
     "Irvine Spectrum Center",
-    "Brea Mall"
+    "Brea Mall",
+    "Los Cerritos"
   ],
   "start": "2026-10-17T00:00:00-07:00",
   "interval_seconds": 60,

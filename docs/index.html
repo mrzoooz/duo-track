@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>iPhone Duo Pickup</title>
-<meta name="description" content="Live in-store pickup status for iPhone Duo 256GB Night Sky at four Orange County Apple Stores.">
+<meta name="description" content="Live in-store pickup status for iPhone Duo 256GB Night Sky at nearby Apple Stores.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Duo Pickup">
 <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
@@ -243,7 +243,7 @@
     } else {
       const quotes = [...new Set(stores.map((s) => s.quote).filter(Boolean))];
       $("headline").textContent = "No pickup yet";
-      $("sub").textContent = quotes.length === 1 ? `Apple says: “${quotes[0]}”` : "None of your four stores show pickup.";
+      $("sub").textContent = quotes.length === 1 ? `Apple says: “${quotes[0]}”` : `None of your ${stores.length} stores show pickup.`;
       $("order").textContent = "Open Apple Store order page";
     }
     if (status.eyebrow) $("eyebrow").textContent = status.eyebrow;
