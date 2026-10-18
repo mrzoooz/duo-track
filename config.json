@@ -2,9 +2,7 @@
   "product_name": "iPhone Duo 256GB Night Sky (T-Mobile, Apple Upgrade)",
   "product_url": "https://www.apple.com/shop/buy-iphone/iphone-duo/7.6-inch-display-256gb-night-sky-t-mobile-apple-upgrade",
   "checkout_reminder": "Night Sky / 256GB / Apple Upgrade 12-mo lease / T-Mobile / AppleCare+ Theft and Loss, pay annually",
-  "parts": [
-    "MK1F4LL/A"
-  ],
+  "part": "MK1F4LL/A",
   "extra_params": {
     "cppart": "TMOBILE_IPHONEDUO"
   },
@@ -17,9 +15,7 @@
     "Irvine Spectrum Center",
     "Brea Mall"
   ],
-  "start": "2026-10-24T00:00:00-07:00",
+  "start": "2026-10-17T00:00:00-07:00",
   "interval_seconds": 60,
-  "renotify_minutes": 10,
-  "error_alert_after": 15,
-  "ntfy_topic": "duo-track-9a5emz0zmam2"
+  "error_alert_after": 15
 }

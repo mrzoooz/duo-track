@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "poll | once | diagnose | test-notify"
+        description: "poll | once | diagnose | test-alert"
         type: choice
-        options: [poll, once, diagnose, test-notify]
+        options: [poll, once, diagnose, test-alert]
         default: poll
       handoff_from:
         description: "internal: run id of the run that started this one"
@@ -16,7 +16,7 @@ on:
 
 permissions:
   actions: write   # dispatch the next run at the ~6h job limit
-  issues: write    # backup alert via an issue that @mentions you
+  issues: write    # live status issue for the Pages dashboard + alert issues that @mention you
   contents: read
 
 jobs:
@@ -28,7 +28,6 @@ jobs:
       - name: Track pickup availability
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           MODE: ${{ inputs.mode || 'poll' }}
           HANDOFF_FROM: ${{ inputs.handoff_from }}
         run: python3 track.py --mode "$MODE" --max-minutes 340 --handoff-from "$HANDOFF_FROM"

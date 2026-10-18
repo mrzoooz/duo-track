@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>iPhone Duo Pickup</title>
+<meta name="description" content="Live in-store pickup status for iPhone Duo 256GB Night Sky at four Orange County Apple Stores.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Duo Pickup">
+<meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0b0d" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='18' y='6' width='28' height='52' rx='7' fill='%231d1d1f'/%3E%3Ccircle cx='32' cy='48' r='4' fill='%2334c759'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f5f5f7;
+    --card: #ffffff;
+    --text: #1d1d1f;
+    --muted: #6e6e73;
+    --line: #e3e3e8;
+    --accent: #0071e3;
+    --accent-text: #ffffff;
+    --ok: #1f8f43;
+    --ok-bg: #e5f6ea;
+    --wait: #6e6e73;
+    --wait-bg: #efeff2;
+    --warn: #a15c00;
+    --warn-bg: #fff3dc;
+    --bad: #c4271d;
+    --bad-bg: #fde8e6;
+    --hero-live: #1f8f43;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b0b0d;
+      --card: #18181b;
+      --text: #f5f5f7;
+      --muted: #a1a1a6;
+      --line: #2c2c31;
+      --accent: #2997ff;
+      --accent-text: #ffffff;
+      --ok: #4cd97b;
+      --ok-bg: #143d22;
+      --wait: #a1a1a6;
+      --wait-bg: #26262b;
+      --warn: #ffb340;
+      --warn-bg: #3a2a10;
+      --bad: #ff6a5f;
+      --bad-bg: #3d1714;
+      --hero-live: #1f8f43;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0b0d; --card: #18181b; --text: #f5f5f7; --muted: #a1a1a6; --line: #2c2c31;
+    --accent: #2997ff; --accent-text: #ffffff; --ok: #4cd97b; --ok-bg: #143d22; --wait: #a1a1a6;
+    --wait-bg: #26262b; --warn: #ffb340; --warn-bg: #3a2a10; --bad: #ff6a5f; --bad-bg: #3d1714;
+    --hero-live: #1f8f43;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: max(20px, env(safe-area-inset-top)) 16px max(32px, env(safe-area-inset-bottom));
+  }
+  header { margin: 8px 4px 18px; }
+  .eyebrow { font-size: 13px; font-weight: 600; letter-spacing: .02em; color: var(--muted); text-transform: uppercase; }
+  h1 { font-size: 28px; line-height: 1.15; margin: 4px 0 4px; letter-spacing: -.02em; }
+  .config { color: var(--muted); font-size: 15px; margin: 0; }
+
+  .card {
+    background: var(--card);
+    border-radius: 18px;
+    padding: 18px;
+    margin-bottom: 14px;
+    border: 1px solid var(--line);
+  }
+  .hero { padding: 22px 18px; }
+  .hero .label { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .02em; }
+  .hero .headline { font-size: 26px; font-weight: 700; letter-spacing: -.02em; line-height: 1.2; margin: 6px 0 6px; }
+  .hero .sub { color: var(--muted); margin: 0; }
+  .hero.live { background: var(--hero-live); border-color: var(--hero-live); color: #fff; }
+  .hero.live .label, .hero.live .sub { color: rgba(255,255,255,.85); }
+
+  .btn {
+    display: block; width: 100%; text-align: center; text-decoration: none; cursor: pointer;
+    background: var(--accent); color: var(--accent-text); border: 0; border-radius: 12px;
+    font-family: inherit; font-size: 17px; font-weight: 600; line-height: 1.2; padding: 16px; margin-top: 16px;
+  }
+  .hero.live .btn { background: #fff; color: #0b6b2e; }
+  .btn.secondary { background: var(--wait-bg); color: var(--text); font-weight: 600; font-size: 15px; padding: 13px; }
+  .reminder { font-size: 13px; color: var(--muted); margin: 10px 2px 0; }
+  .hero.live .reminder { color: rgba(255,255,255,.85); }
+
+  .meta { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); margin: 0 4px 14px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+  .dot.stale { background: var(--warn); }
+  .dot.down { background: var(--bad); }
+
+  .notice { border-radius: 12px; padding: 12px 14px; font-size: 14px; margin-bottom: 14px; }
+  .notice.warn { background: var(--warn-bg); color: var(--warn); }
+  .notice.bad { background: var(--bad-bg); color: var(--bad); }
+
+  h2 { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .02em; margin: 0 0 6px; }
+  .stores { list-style: none; margin: 0; padding: 0; }
+  .store { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+  .store:first-child { border-top: 0; }
+  .store .name { font-weight: 600; }
+  .store .num { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 4px; }
+  .store .quote { color: var(--muted); font-size: 14px; margin-top: 2px; }
+  .pill { flex: none; font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--wait-bg); color: var(--wait); white-space: nowrap; }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); }
+  .pill.bad { background: var(--bad-bg); color: var(--bad); }
+
+  .events { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+  .events li { display: flex; gap: 12px; padding: 7px 0; border-top: 1px solid var(--line); }
+  .events li:first-child { border-top: 0; }
+  .events time { color: var(--muted); flex: none; width: 112px; font-variant-numeric: tabular-nums; }
+  .empty { color: var(--muted); font-size: 14px; margin: 0; }
+
+  footer { font-size: 13px; color: var(--muted); margin: 18px 4px 0; }
+  footer p { margin: 0 0 8px; }
+  footer a { color: var(--accent); text-decoration: none; }
+  .skeleton { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Apple Store pickup tracker</div>
+    <h1>iPhone Duo 256GB Night Sky</h1>
+    <p class="config">T-Mobile · Apple Upgrade · AppleCare+ Theft and Loss</p>
+  </header>
+
+  <section class="card hero" id="hero">
+    <div class="label">Pickup status</div>
+    <div class="headline skeleton" id="headline">Loading…</div>
+    <p class="sub" id="sub"></p>
+    <a class="btn" id="order" href="https://www.apple.com/shop/buy-iphone/iphone-duo/7.6-inch-display-256gb-night-sky-t-mobile-apple-upgrade" target="_blank" rel="noopener">Open Apple Store order page</a>
+    <p class="reminder" id="reminder">Select: Night Sky / 256GB / Apple Upgrade 12-mo lease / T-Mobile / AppleCare+ Theft and Loss, pay annually</p>
+  </section>
+
+  <div class="meta" id="meta"><span class="dot" id="dot"></span><span id="checked">Waiting for the tracker…</span></div>
+  <div id="notices"></div>
+
+  <section class="card">
+    <h2>Stores</h2>
+    <ul class="stores" id="stores"><li class="empty">Loading…</li></ul>
+  </section>
+
+  <section class="card">
+    <h2>Sound alarm</h2>
+    <p class="empty" id="alarm-text">Plays a chime while this page is open and pickup shows up. Email alerts work without it.</p>
+    <button class="btn secondary" id="alarm" type="button">Turn on sound alarm</button>
+  </section>
+
+  <section class="card">
+    <h2>Activity</h2>
+    <ul class="events" id="events"><li class="empty">No activity yet.</li></ul>
+  </section>
+
+  <footer>
+    <p>The tracker checks Apple every minute from GitHub Actions. When a store shows pickup, GitHub emails you, so you don't need this page open. This page refreshes every 75 seconds.</p>
+    <p><a id="repo-link" href="https://github.com/mrzoooz/duo-track">Repository</a> · <a id="run-link" href="https://github.com/mrzoooz/duo-track/actions">Tracker run log</a></p>
+  </footer>
+</main>
+
+<script>
+(() => {
+  const onPages = location.hostname.endsWith(".github.io");
+  const OWNER = onPages ? location.hostname.split(".")[0] : "mrzoooz";
+  const REPO = (onPages && location.pathname.split("/")[1]) || "duo-track";
+  const STATUS_URL = `https://api.github.com/repos/${OWNER}/${REPO}/issues?labels=tracker-status&state=open&per_page=1`;
+  const REFRESH_MS = 75_000;        // stays under GitHub's 60 requests/hour limit for visitors
+  const STALE_AFTER_S = 5 * 60;
+  const $ = (id) => document.getElementById(id);
+
+  let status = null;
+  let lastFetch = 0;
+  let timer = null;
+  let rateLimitedUntil = 0;
+  let fetchError = null;
+
+  $("repo-link").href = `https://github.com/${OWNER}/${REPO}`;
+
+  function ago(iso) {
+    const s = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
+    if (s < 60) return `${s}s ago`;
+    if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min ago`;
+    return `${Math.floor(s / 86400)} days ago`;
+  }
+  const clock = (iso) => new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  function pill(store) {
+    if (store.available) return '<span class="pill ok">Available</span>';
+    if (store.display === "not found") return '<span class="pill bad">Not found</span>';
+    if (store.display === "unavailable") return '<span class="pill">Unavailable</span>';
+    return '<span class="pill">Not yet</span>';
+  }
+
+  function render() {
+    const notices = [];
+    if (fetchError) notices.push(`<div class="notice bad">${esc(fetchError)}</div>`);
+    if (!status) {
+      $("notices").innerHTML = notices.join("");
+      if (!fetchError && lastFetch) {
+        $("headline").textContent = "Waiting for the first check";
+        $("headline").classList.remove("skeleton");
+        $("sub").textContent = "The tracker posts its first result within a couple of minutes of starting.";
+        $("stores").innerHTML = '<li class="empty">No data yet.</li>';
+      }
+      return;
+    }
+
+    const stores = status.stores || [];
+    const open = stores.filter((s) => s.available);
+    const hero = $("hero");
+    hero.classList.toggle("live", open.length > 0);
+    $("headline").classList.remove("skeleton");
+    if (open.length) {
+      $("headline").textContent = `Pickup available at ${open.map((s) => s.name).join(", ")}`;
+      $("sub").textContent = "Order now and choose in-store pickup.";
+      $("order").textContent = "Order now";
+    } else {
+      const quotes = [...new Set(stores.map((s) => s.quote).filter(Boolean))];
+      $("headline").textContent = "No pickup yet";
+      $("sub").textContent = quotes.length === 1 ? `Apple says: “${quotes[0]}”` : "None of your four stores show pickup.";
+      $("order").textContent = "Open Apple Store order page";
+    }
+    if (status.product_url) $("order").href = status.product_url;
+    if (status.checkout_reminder) $("reminder").textContent = `Select: ${status.checkout_reminder}`;
+    if (status.run_url) $("run-link").href = status.run_url;
+    document.title = open.length ? "🟢 AVAILABLE · iPhone Duo Pickup" : "iPhone Duo Pickup";
+
+    $("stores").innerHTML = stores.length ? stores.map((s) => `
+      <li class="store">
+        <div>
+          <div class="name">${esc(s.name)}${s.number ? `<span class="num">${esc(s.number)}</span>` : ""}</div>
+          ${s.quote ? `<div class="quote">${esc(s.quote)}</div>` : ""}
+        </div>
+        ${pill(s)}
+      </li>`).join("") : '<li class="empty">No data yet.</li>';
+
+    const events = status.events || [];
+    $("events").innerHTML = events.length
+      ? events.slice(0, 15).map((e) => `<li><time datetime="${esc(e.at)}">${esc(clock(e.at))}</time><span>${esc(e.text)}</span></li>`).join("")
+      : '<li class="empty">No activity yet.</li>';
+
+    const age = status.checked_at ? (Date.now() - Date.parse(status.checked_at)) / 1000 : Infinity;
+    if (status.error) notices.push(`<div class="notice bad">Latest check failed (${esc(status.error)}). Showing the last good result.</div>`);
+    if (age > STALE_AFTER_S) notices.push(`<div class="notice warn">The tracker hasn't reported in a while. It may be restarting; this clears on its next check.</div>`);
+    $("notices").innerHTML = notices.join("");
+    $("dot").className = "dot" + (status.error ? " down" : age > STALE_AFTER_S ? " stale" : "");
+    tick();
+    alarm.update(open.length > 0);
+  }
+
+  function tick() {
+    if (!status || !status.checked_at) return;
+    $("checked").textContent = `Checked ${ago(status.checked_at)} · every ${Math.round((status.interval_seconds || 60))}s`;
+  }
+
+  async function load() {
+    clearTimeout(timer);
+    if (Date.now() < rateLimitedUntil) return schedule(rateLimitedUntil - Date.now() + 1000);
+    lastFetch = Date.now();
+    try {
+      const res = await fetch(STATUS_URL, { headers: { Accept: "application/vnd.github+json" }, cache: "no-store" });
+      if ((res.status === 403 || res.status === 429) && res.headers.get("x-ratelimit-remaining") === "0") {
+        rateLimitedUntil = Number(res.headers.get("x-ratelimit-reset")) * 1000;
+        fetchError = `GitHub's hourly limit for this network was reached. Resuming at ${new Date(rateLimitedUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. Email alerts are unaffected.`;
+      } else if (!res.ok) {
+        fetchError = `Couldn't load status (HTTP ${res.status}). Retrying.`;
+      } else {
+        const issues = await res.json();
+        const body = issues[0]?.body || "";
+        const m = body.match(/```json\n([\s\S]*?)\n```/);
+        status = m ? JSON.parse(m[1]) : null;
+        fetchError = null;
+      }
+    } catch (e) {
+      fetchError = "Couldn't reach GitHub. Retrying.";
+    }
+    render();
+    schedule(REFRESH_MS);
+  }
+
+  function schedule(ms) {
+    clearTimeout(timer);
+    if (document.visibilityState === "visible") timer = setTimeout(load, ms);
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return clearTimeout(timer);
+    if (Date.now() - lastFetch > 30_000) load(); else schedule(REFRESH_MS - (Date.now() - lastFetch));
+  });
+  setInterval(tick, 1000);
+
+  // Sound alarm: browsers only allow audio after a tap, so the user arms it once.
+  const alarm = {
+    ctx: null, armed: false, ringing: null,
+    arm() {
+      this.ctx = this.ctx || new (window.AudioContext || window.webkitAudioContext)();
+      this.ctx.resume();
+      this.armed = true;
+      this.chime();
+      $("alarm").textContent = "Sound alarm on · tap to turn off";
+      $("alarm-text").textContent = "Keep this page open with the screen on. A chime repeats while any store shows pickup.";
+    },
+    disarm() {
+      this.armed = false;
+      clearInterval(this.ringing); this.ringing = null;
+      $("alarm").textContent = "Turn on sound alarm";
+      $("alarm-text").textContent = "Plays a chime while this page is open and pickup shows up. Email alerts work without it.";
+    },
+    chime() {
+      const t = this.ctx.currentTime;
+      [880, 1175, 1568].forEach((f, i) => {
+        const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+        o.frequency.value = f; o.type = "sine";
+        g.gain.setValueAtTime(0.0001, t + i * 0.18);
+        g.gain.exponentialRampToValueAtTime(0.4, t + i * 0.18 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.18 + 0.5);
+        o.connect(g).connect(this.ctx.destination);
+        o.start(t + i * 0.18); o.stop(t + i * 0.18 + 0.55);
+      });
+    },
+    update(isOpen) {
+      if (!this.armed) return;
+      if (isOpen && !this.ringing) { this.chime(); this.ringing = setInterval(() => this.chime(), 4000); }
+      if (!isOpen && this.ringing) { clearInterval(this.ringing); this.ringing = null; }
+    },
+  };
+  $("alarm").addEventListener("click", () => (alarm.armed ? alarm.disarm() : alarm.arm()));
+
+  load();
+})();
+</script>
+</body>
+</html>
