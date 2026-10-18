@@ -32,6 +32,10 @@ Actions → **track** → **Run workflow**, then pick a mode:
 - `diagnose`: one check with per-store details
 - `once`: one check
 
+The **config** input picks what to track: `config.json` (the Duo) or `tests/iphone-18-pro-max.json`, an accuracy
+test that writes to its own status issue (view it at https://mrzoooz.github.io/duo-track/?label=tracker-status-test),
+labels its alerts `[TEST]`, and stops after **minutes** instead of handing off.
+
 Locally: `python3 track.py --mode once` (no dependencies).
 
 ## Stop it
