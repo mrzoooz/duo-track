@@ -175,7 +175,7 @@ class StatusBoard:
             return 0
         return self.previous.get("failure_streak", 0)
 
-    def publish(self, results, error, checked_at, failure_streak=0):
+    def publish(self, results, error, checked_at, failure_streak=0, stopped=False):
         status = {
             "eyebrow": self.cfg.get("eyebrow", "Apple Store pickup tracker"),
             "title": self.cfg["title"],
@@ -188,6 +188,7 @@ class StatusBoard:
             "updated_at": now_iso(),
             "error": error,
             "failure_streak": failure_streak,
+            "stopped_at": now_iso() if stopped else None,
             "stores": results,
             "events": self.events,
             "run_url": (f"{os.environ.get('GITHUB_SERVER_URL')}/{os.environ.get('GITHUB_REPOSITORY')}"
@@ -244,11 +245,12 @@ def should_exit(config, handoff_from, retries=0):
     return True
 
 
-def dispatch_next_run(config):
+def dispatch_next_run(config, until):
     try:
         github_api(f"actions/workflows/{WORKFLOW_FILE}/dispatches", method="POST", payload={
             "ref": os.environ.get("GITHUB_REF_NAME", "main"),
-            "inputs": {"mode": "poll", "config": config, "handoff_from": os.environ["GITHUB_RUN_ID"]},
+            "inputs": {"mode": "poll", "config": config, "until": until or "",
+                       "handoff_from": os.environ["GITHUB_RUN_ID"]},
         })
         log("dispatched next run")
     except Exception as e:
@@ -276,7 +278,7 @@ def diagnose(cfg):
             f"quote={r['quote']!r} available={r['available']}")
 
 
-def poll(cfg, config, handoff_from, max_minutes):
+def poll(cfg, config, handoff_from, max_minutes, until=""):
     start = datetime.fromisoformat(cfg["start"])
     if datetime.now(timezone.utc) < start:
         log(f"not polling until {start.astimezone(PT):%a %b %d %H:%M %Z}")
@@ -285,10 +287,22 @@ def poll(cfg, config, handoff_from, max_minutes):
         log("another tracker run is active; exiting")
         return
 
+    # Optional overall end time (test configs set max_total_minutes); carried across handoffs.
+    if not until and cfg.get("max_total_minutes"):
+        until = (datetime.now(timezone.utc) + timedelta(minutes=cfg["max_total_minutes"])).isoformat(timespec="seconds")
+    end = datetime.fromisoformat(until) if until else None
+
+    def can_continue():
+        return (IN_ACTIONS and cfg.get("handoff", True)
+                and (end is None or datetime.now(timezone.utc) < end - timedelta(minutes=1)))
+
     board = StatusBoard(cfg)
     if not handoff_from:
-        board.event("Tracker started")
+        board.event("Tracker started" + (f", runs until {both_times(until)}" if end else ""))
     deadline = time.monotonic() + max_minutes * 60 if max_minutes else None
+    if end:
+        to_end = time.monotonic() + (end - datetime.now(timezone.utc)).total_seconds()
+        deadline = min(deadline, to_end) if deadline else to_end
     alerted = board.recently_available()
     results, checked_at = board.previous.get("stores", []), board.previous.get("checked_at")
     # Apple starts answering 541 to a runner IP after roughly an hour of checks, so runs are short
@@ -315,10 +329,10 @@ def poll(cfg, config, handoff_from, max_minutes):
                 alert(cfg, f"{cfg.get('alert_prefix', '')}{cfg['title']} tracker can't reach Apple",
                       f"{streak} checks in a row failed ({error}). Check the Apple Store app manually "
                       "until this recovers.")
-            if failures >= cfg.get("rotate_after_failures", 3) and IN_ACTIONS and cfg.get("handoff", True):
+            if failures >= cfg.get("rotate_after_failures", 3) and can_continue():
                 board.event(f"Switched to a fresh runner after {error}")
                 board.publish(results, error, checked_at, streak)
-                dispatch_next_run(config)
+                dispatch_next_run(config, until)
                 return
         if error is None:
             available = {r["name"] for r in results if r["available"]}
@@ -334,11 +348,11 @@ def poll(cfg, config, handoff_from, max_minutes):
         board.publish(results, error, checked_at, streak)
 
         if deadline and time.monotonic() >= deadline:
-            if IN_ACTIONS and cfg.get("handoff", True):
-                dispatch_next_run(config)
+            if can_continue():
+                dispatch_next_run(config, until)
             else:
-                board.event("Tracker stopped (end of run)")
-                board.publish(results, None, checked_at)
+                board.event("Tracker stopped (scheduled end)")
+                board.publish(results, error, checked_at, streak, stopped=True)
             return
         if IN_ACTIONS and time.monotonic() - last_run_check >= 600:
             last_run_check = time.monotonic()
@@ -355,12 +369,13 @@ def main():
     ap.add_argument("--config", default="config.json", help="path relative to the repo root")
     ap.add_argument("--max-minutes", type=float, default=0, help="stop polling after this long (0 = forever)")
     ap.add_argument("--handoff-from", default="", help="run id of the run that started this one")
+    ap.add_argument("--until", default="", help="ISO time after which the tracker stops instead of handing off")
     args = ap.parse_args()
     with open(os.path.join(ROOT, args.config)) as f:
         cfg = json.load(f)
 
     if args.mode == "poll":
-        poll(cfg, args.config, args.handoff_from, args.max_minutes)
+        poll(cfg, args.config, args.handoff_from, args.max_minutes, args.until)
     elif args.mode == "diagnose":
         diagnose(cfg)
     else:

@@ -17,8 +17,11 @@ on:
         options: [config.json, tests/iphone-18-pro-max.json]
         default: config.json
       minutes:
-        description: "poll mode: minutes before this run ends (and hands off, unless the config disables it)"
+        description: "poll mode: minutes before this run hands off to a fresh runner"
         default: "40"
+      until:
+        description: "optional ISO time to stop at (set automatically for test configs)"
+        default: ""
       handoff_from:
         description: "internal: run id of the run that started this one"
         default: ""
@@ -40,5 +43,6 @@ jobs:
           MODE: ${{ inputs.mode || 'poll' }}
           CONFIG: ${{ inputs.config || 'config.json' }}
           MINUTES: ${{ inputs.minutes || '40' }}
+          UNTIL: ${{ inputs.until }}
           HANDOFF_FROM: ${{ inputs.handoff_from }}
-        run: python3 track.py --mode "$MODE" --config "$CONFIG" --max-minutes "$MINUTES" --handoff-from "$HANDOFF_FROM"
+        run: python3 track.py --mode "$MODE" --config "$CONFIG" --max-minutes "$MINUTES" --until "$UNTIL" --handoff-from "$HANDOFF_FROM"

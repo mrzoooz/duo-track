@@ -24,7 +24,7 @@
   "error_alert_after": 15,
   "status_title": "Test tracker status: iPhone 18 Pro Max (live)",
   "alert_label": "pickup-alert-test",
-  "handoff": false,
   "alert_prefix": "[TEST] ",
-  "status_label": "tracker-status-test"
+  "status_label": "tracker-status-test",
+  "max_total_minutes": 120
 }
