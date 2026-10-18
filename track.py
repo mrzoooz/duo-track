@@ -45,7 +45,7 @@ def strip_html(s):
 # --- Apple -------------------------------------------------------------------
 
 def fetch_stores(cfg, location):
-    q = [("pl", "true"), ("mts.0", "regular"), ("mts.1", "compact"),
+    q = [("fae", "true"), ("pl", "true"), ("mts.0", "regular"), ("mts.1", "compact"),
          ("searchNearby", "true"), ("location", location)]
     q += [(f"parts.{i}", p) for i, p in enumerate(cfg["parts"])]
     q += list(cfg.get("extra_params", {}).items())
@@ -180,9 +180,25 @@ def diagnose(cfg):
         log(f"fulfillment refs: {refs[:10]}")
         for m in re.finditer(r"[Cc]heck back[^<\"]{0,80}", page):
             log(f"page text: {m.group(0)}")
+        for key in ("fulfillment-messages", "cppart", "purchaseOption", "option.0", "carrierModel", "pickup"):
+            for m in list(re.finditer(re.escape(key), page))[:4]:
+                log(f"context {key!r}: {page[max(0, m.start() - 250):m.end() + 250]!r}")
     except Exception as e:
         log(f"product page fetch failed: {e}")
-    results, seen = check(cfg)
+    part = cfg["parts"][0]
+    for params in ([("parts.0", part), ("location", "92626")],
+                   [("parts.0", part), ("store", "R004")],
+                   [("parts.0", part), ("cppart", "TMOBILE/US"), ("location", "92626")],
+                   [("parts.0", part), ("cppart", "UNLOCKED/US"), ("location", "92626")],
+                   [("parts.0", part), ("cppart", "TMOBILE/US"), ("store", "R004")],
+                   [("parts.0", f"{part}+tmobile"), ("location", "92626")],
+                   [("parts.0", "MHJA3AM/A"), ("location", "92626")]):  # control: 20W USB-C adapter
+        probe(cfg, params)
+    try:
+        results, seen = check(cfg)
+    except Exception as e:
+        log(f"configured check failed: {e}")
+        return
     log(f"stores returned: {sorted(seen)}")
     for store, parts in results.items():
         if parts is None:
@@ -196,6 +212,25 @@ def diagnose(cfg):
             keep["quote"] = msg.get("storePickupQuote")
             log(f"{store} [{seen_number(seen, store)}] {part}: {json.dumps(keep)}")
     log(summarize(results))
+
+
+def probe(cfg, params):
+    q = [("fae", "true"), ("pl", "true"), ("mts.0", "regular"), ("mts.1", "compact"),
+         ("searchNearby", "true")] + params
+    try:
+        body = http(f"{FULFILLMENT_URL}?{urllib.parse.urlencode(q)}",
+                    headers={"Accept": "application/json", "Referer": cfg["product_url"]})
+        pm = json.loads(body)["body"]["content"]["pickupMessage"]
+        stores = [(s.get("storeNumber"), s.get("storeName"),
+                   {p: (i.get("pickupDisplay"), strip_html(i.get("pickupSearchQuote")))
+                    for p, i in s.get("partsAvailability", {}).items()})
+                  for s in pm.get("stores", [])]
+        extra = {k: v for k, v in pm.items() if k != "stores" and isinstance(v, (str, bool, int))}
+        log(f"probe {params}: OK {len(stores)} stores {stores} meta={extra}")
+    except urllib.error.HTTPError as e:
+        log(f"probe {params}: HTTP {e.code} {e.read()[:200]!r}")
+    except Exception as e:
+        log(f"probe {params}: {e!r}")
 
 
 def seen_number(seen, want):
