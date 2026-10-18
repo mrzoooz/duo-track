@@ -100,6 +100,8 @@
   .hero.live .reminder { color: rgba(255,255,255,.85); }
 
   .meta { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); margin: 0 4px 14px; }
+  .stamps { font-size: 13px; color: var(--muted); margin: -8px 4px 14px 20px; font-variant-numeric: tabular-nums; }
+  .stamps:empty { display: none; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
   .dot.stale { background: var(--warn); }
   .dot.down { background: var(--bad); }
@@ -122,7 +124,8 @@
   .events { list-style: none; margin: 0; padding: 0; font-size: 14px; }
   .events li { display: flex; gap: 12px; padding: 7px 0; border-top: 1px solid var(--line); }
   .events li:first-child { border-top: 0; }
-  .events time { color: var(--muted); flex: none; width: 112px; font-variant-numeric: tabular-nums; }
+  .events time { color: var(--muted); flex: none; width: 156px; font-variant-numeric: tabular-nums; }
+  .events time small { display: block; font-size: 12px; opacity: .8; }
   .empty { color: var(--muted); font-size: 14px; margin: 0; }
 
   footer { font-size: 13px; color: var(--muted); margin: 18px 4px 0; }
@@ -134,9 +137,9 @@
 <body>
 <main>
   <header>
-    <div class="eyebrow">Apple Store pickup tracker</div>
-    <h1>iPhone Duo 256GB Night Sky</h1>
-    <p class="config">T-Mobile · Apple Upgrade · AppleCare+ Theft and Loss</p>
+    <div class="eyebrow" id="eyebrow">Apple Store pickup tracker</div>
+    <h1 id="title">iPhone Duo 256GB Night Sky</h1>
+    <p class="config" id="subtitle">T-Mobile · Apple Upgrade · AppleCare+ Theft and Loss</p>
   </header>
 
   <section class="card hero" id="hero">
@@ -148,6 +151,7 @@
   </section>
 
   <div class="meta" id="meta"><span class="dot" id="dot"></span><span id="checked">Waiting for the tracker…</span></div>
+  <div class="stamps" id="stamps"></div>
   <div id="notices"></div>
 
   <section class="card">
@@ -177,7 +181,8 @@
   const onPages = location.hostname.endsWith(".github.io");
   const OWNER = onPages ? location.hostname.split(".")[0] : "mrzoooz";
   const REPO = (onPages && location.pathname.split("/")[1]) || "duo-track";
-  const STATUS_URL = `https://api.github.com/repos/${OWNER}/${REPO}/issues?labels=tracker-status&state=open&per_page=1`;
+  const LABEL = (new URLSearchParams(location.search).get("label") || "tracker-status").replace(/[^a-z0-9-]/gi, "");
+  const STATUS_URL = `https://api.github.com/repos/${OWNER}/${REPO}/issues?labels=${LABEL}&state=open&per_page=1`;
   const REFRESH_MS = 75_000;        // stays under GitHub's 60 requests/hour limit for visitors
   const STALE_AFTER_S = 5 * 60;
   const $ = (id) => document.getElementById(id);
@@ -197,7 +202,12 @@
     if (s < 86400) return `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min ago`;
     return `${Math.floor(s / 86400)} days ago`;
   }
-  const clock = (iso) => new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const fmt = (tz, opts) => new Intl.DateTimeFormat("en-US", { timeZone: tz, month: "short", day: "numeric", ...opts });
+  const PT_LONG = fmt("America/Los_Angeles", { hour: "numeric", minute: "2-digit", second: "2-digit", timeZoneName: "short" });
+  const UTC_LONG = fmt("UTC", { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+  const PT_SHORT = fmt("America/Los_Angeles", { hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+  const UTC_SHORT = fmt("UTC", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const stamps = (iso) => `${PT_LONG.format(new Date(iso))} · ${UTC_LONG.format(new Date(iso))} UTC`;
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
   function pill(store) {
@@ -236,10 +246,15 @@
       $("sub").textContent = quotes.length === 1 ? `Apple says: “${quotes[0]}”` : "None of your four stores show pickup.";
       $("order").textContent = "Open Apple Store order page";
     }
+    if (status.eyebrow) $("eyebrow").textContent = status.eyebrow;
+    if (status.title) $("title").textContent = status.title;
+    if (status.subtitle !== undefined) $("subtitle").textContent = status.subtitle;
+    $("stamps").textContent = status.checked_at ? `Last check: ${stamps(status.checked_at)}` : "";
     if (status.product_url) $("order").href = status.product_url;
     if (status.checkout_reminder) $("reminder").textContent = `Select: ${status.checkout_reminder}`;
     if (status.run_url) $("run-link").href = status.run_url;
-    document.title = open.length ? "🟢 AVAILABLE · iPhone Duo Pickup" : "iPhone Duo Pickup";
+    const name = status.title || "iPhone Duo";
+    document.title = open.length ? `🟢 AVAILABLE · ${name}` : `${name} · Pickup`;
 
     $("stores").innerHTML = stores.length ? stores.map((s) => `
       <li class="store">
@@ -252,7 +267,7 @@
 
     const events = status.events || [];
     $("events").innerHTML = events.length
-      ? events.slice(0, 15).map((e) => `<li><time datetime="${esc(e.at)}">${esc(clock(e.at))}</time><span>${esc(e.text)}</span></li>`).join("")
+      ? events.slice(0, 15).map((e) => `<li><time datetime="${esc(e.at)}" title="${esc(stamps(e.at))}">${esc(PT_SHORT.format(new Date(e.at)))}<small>${esc(UTC_SHORT.format(new Date(e.at)))} UTC</small></time><span>${esc(e.text)}</span></li>`).join("")
       : '<li class="empty">No activity yet.</li>';
 
     const age = status.checked_at ? (Date.now() - Date.parse(status.checked_at)) / 1000 : Infinity;

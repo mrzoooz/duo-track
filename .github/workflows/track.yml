@@ -1,4 +1,5 @@
 name: track
+run-name: "${{ inputs.mode || 'poll' }} ${{ inputs.config || 'config.json' }}"
 
 on:
   schedule:
@@ -10,6 +11,14 @@ on:
         type: choice
         options: [poll, once, diagnose, test-alert]
         default: poll
+      config:
+        description: "which product config to track"
+        type: choice
+        options: [config.json, tests/iphone-18-pro-max.json]
+        default: config.json
+      minutes:
+        description: "poll mode: minutes before this run ends (and hands off, unless the config disables it)"
+        default: "340"
       handoff_from:
         description: "internal: run id of the run that started this one"
         default: ""
@@ -29,5 +38,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MODE: ${{ inputs.mode || 'poll' }}
+          CONFIG: ${{ inputs.config || 'config.json' }}
+          MINUTES: ${{ inputs.minutes || '340' }}
           HANDOFF_FROM: ${{ inputs.handoff_from }}
-        run: python3 track.py --mode "$MODE" --max-minutes 340 --handoff-from "$HANDOFF_FROM"
+        run: python3 track.py --mode "$MODE" --config "$CONFIG" --max-minutes "$MINUTES" --handoff-from "$HANDOFF_FROM"

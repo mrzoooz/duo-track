@@ -27,17 +27,23 @@ UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
 # this older endpoint returns the same per-store pickup data.
 PICKUP_URL = "https://www.apple.com/shop/retail/pickup-message"
 WORKFLOW_FILE = "track.yml"
-STATUS_LABEL = "tracker-status"
-ALERT_LABEL = "pickup-alert"
 IN_ACTIONS = os.environ.get("GITHUB_ACTIONS") == "true"
 
 
 def log(msg):
-    print(f"[{datetime.now(PT):%m-%d %H:%M:%S %Z}] {msg}", flush=True)
+    now = datetime.now(timezone.utc)
+    print(f"[{now.astimezone(PT):%m-%d %H:%M:%S %Z} | {now:%H:%M:%S} UTC] {msg}", flush=True)
 
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def both_times(iso=None):
+    """'Oct 17, 11:56:42 PM PDT (Oct 18, 06:56:42 UTC)'."""
+    t = datetime.fromisoformat(iso) if iso else datetime.now(timezone.utc)
+    pt = t.astimezone(PT)
+    return (f"{pt:%b %-d, %-I:%M:%S %p %Z} ({t.astimezone(timezone.utc):%b %-d, %H:%M:%S} UTC)")
 
 
 def http(url, data=None, headers=None, method=None, timeout=20):
@@ -120,8 +126,8 @@ def alert(cfg, title, text):
     try:
         github_api("issues", method="POST", payload={
             "title": title,
-            "labels": [ALERT_LABEL],
-            "body": (f"@{owner} {text}\n\n**[Order now]({cfg['product_url']})**. "
+            "labels": [cfg.get("alert_label", "pickup-alert")],
+            "body": (f"@{owner} {text}\n\nDetected {both_times()}.\n\n**[Order now]({cfg['product_url']})**. "
                      f"Select: {cfg['checkout_reminder']}"),
         })
     except Exception as e:
@@ -129,19 +135,21 @@ def alert(cfg, title, text):
 
 
 class StatusBoard:
-    """Live status JSON kept in the body of one open issue labeled tracker-status.
+    """Live status JSON kept in the body of one open issue labeled status_label (default tracker-status).
 
     docs/index.html (GitHub Pages) reads it through the public GitHub API.
     """
 
     def __init__(self, cfg):
         self.cfg = cfg
+        self.label = cfg.get("status_label", "tracker-status")
         self.number = None
         self.previous = {}
+        self.events = []
         if not IN_ACTIONS:
             return
         try:
-            found = github_api(f"issues?labels={STATUS_LABEL}&state=open&per_page=1")
+            found = github_api(f"issues?labels={self.label}&state=open&per_page=1")
             if found:
                 self.number = found[0]["number"]
                 self.previous = parse_status(found[0].get("body") or "")
@@ -162,6 +170,9 @@ class StatusBoard:
 
     def publish(self, results, error, checked_at):
         status = {
+            "eyebrow": self.cfg.get("eyebrow", "Apple Store pickup tracker"),
+            "title": self.cfg.get("title", self.cfg["product_name"]),
+            "subtitle": self.cfg.get("subtitle", ""),
             "product": self.cfg["product_name"],
             "product_url": self.cfg["product_url"],
             "checkout_reminder": self.cfg["checkout_reminder"],
@@ -183,7 +194,8 @@ class StatusBoard:
                 github_api(f"issues/{self.number}", method="PATCH", payload={"body": body})
             else:
                 self.number = github_api("issues", method="POST", payload={
-                    "title": "Tracker status (live)", "body": body, "labels": [STATUS_LABEL]})["number"]
+                    "title": self.cfg.get("status_title", "Tracker status (live)"), "body": body,
+                    "labels": [self.label]})["number"]
         except urllib.error.HTTPError as e:
             log(f"status publish failed: {describe_error(e)}")
             if e.code in (404, 410):
@@ -203,18 +215,18 @@ def parse_status(body):
 # --- GitHub Actions run coordination ----------------------------------------------
 # Scheduled runs act as a watchdog; one long-running run polls and hands off to the next.
 
-def older_tracker_running(handoff_from):
+def older_tracker_running(config, handoff_from):
     me = int(os.environ["GITHUB_RUN_NUMBER"])
     runs = github_api(f"actions/workflows/{WORKFLOW_FILE}/runs?status=in_progress&per_page=50")
-    return any(r["run_number"] < me and str(r["id"]) != handoff_from
+    return any(r["run_number"] < me and str(r["id"]) != handoff_from and r.get("display_title") == f"poll {config}"
                for r in runs.get("workflow_runs", []))
 
 
-def should_exit(handoff_from, retries=0):
+def should_exit(config, handoff_from, retries=0):
     """True if an older tracker is still active (re-checked so a finishing run doesn't count)."""
     for attempt in range(retries + 1):
         try:
-            if not older_tracker_running(handoff_from):
+            if not older_tracker_running(config, handoff_from):
                 return False
         except Exception as e:
             log(f"run check failed: {e}")
@@ -224,11 +236,11 @@ def should_exit(handoff_from, retries=0):
     return True
 
 
-def dispatch_next_run():
+def dispatch_next_run(config):
     try:
         github_api(f"actions/workflows/{WORKFLOW_FILE}/dispatches", method="POST", payload={
             "ref": os.environ.get("GITHUB_REF_NAME", "main"),
-            "inputs": {"mode": "poll", "handoff_from": os.environ["GITHUB_RUN_ID"]},
+            "inputs": {"mode": "poll", "config": config, "handoff_from": os.environ["GITHUB_RUN_ID"]},
         })
         log("dispatched next run")
     except Exception as e:
@@ -238,17 +250,30 @@ def dispatch_next_run():
 # --- Modes ---------------------------------------------------------------------
 
 def diagnose(cfg):
+    page = http(cfg["product_url"])
+    title = re.search(r"<title>(.*?)</title>", page, re.S)
+    skus = sorted(set(re.findall(r'"sku"\s*:\s*"([^"]+)"', page)))
+    selection = re.search(r"uniqueProductSelection\s*=\s*(\{.*?\});", page)
+    log(f"product page: {strip_html(title.group(1)) if title else '?'} | skus={skus} | "
+        f"selection={selection.group(1) if selection else None}")
+    if not cfg.get("part") and skus:
+        cfg["part"] = skus[0].split("+")[0]
+    if selection and "cppart" not in cfg.get("extra_params", {}):
+        carrier = json.loads(selection.group(1)).get("carrierModel")
+        if carrier:
+            cfg.setdefault("extra_params", {})["cppart"] = carrier
+    log(f"checking part={cfg['part']} params={cfg.get('extra_params')}")
     for r in check(cfg):
         log(f"{r['name']} [{r['number']}] {cfg['part']} '{r['title']}': pickupDisplay={r['display']} "
             f"quote={r['quote']!r} available={r['available']}")
 
 
-def poll(cfg, handoff_from, max_minutes):
+def poll(cfg, config, handoff_from, max_minutes):
     start = datetime.fromisoformat(cfg["start"])
     if datetime.now(timezone.utc) < start:
         log(f"not polling until {start.astimezone(PT):%a %b %d %H:%M %Z}")
         return
-    if IN_ACTIONS and should_exit(handoff_from, retries=2):
+    if IN_ACTIONS and should_exit(config, handoff_from, retries=2):
         log("another tracker run is active; exiting")
         return
 
@@ -292,12 +317,15 @@ def poll(cfg, handoff_from, max_minutes):
         board.publish(results, error, checked_at)
 
         if deadline and time.monotonic() >= deadline:
-            if IN_ACTIONS:
-                dispatch_next_run()
+            if IN_ACTIONS and cfg.get("handoff", True):
+                dispatch_next_run(config)
+            else:
+                board.event("Tracker stopped (end of run)")
+                board.publish(results, None, checked_at)
             return
         if IN_ACTIONS and time.monotonic() - last_run_check >= 600:
             last_run_check = time.monotonic()
-            if should_exit(handoff_from):
+            if should_exit(config, handoff_from):
                 log("an older tracker run is active; exiting")
                 return
         time.sleep(max(1, cfg["interval_seconds"] - (time.monotonic() - t0)))
@@ -306,15 +334,15 @@ def poll(cfg, handoff_from, max_minutes):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--mode", default="poll", choices=["poll", "once", "diagnose", "test-alert"])
-    ap.add_argument("--config", default=os.path.join(ROOT, "config.json"))
+    ap.add_argument("--config", default="config.json", help="path relative to the repo root")
     ap.add_argument("--max-minutes", type=float, default=0, help="stop polling after this long (0 = forever)")
     ap.add_argument("--handoff-from", default="", help="run id of the run that started this one")
     args = ap.parse_args()
-    with open(args.config) as f:
+    with open(os.path.join(ROOT, args.config)) as f:
         cfg = json.load(f)
 
     if args.mode == "poll":
-        poll(cfg, args.handoff_from, args.max_minutes)
+        poll(cfg, args.config, args.handoff_from, args.max_minutes)
     elif args.mode == "diagnose":
         diagnose(cfg)
     else:

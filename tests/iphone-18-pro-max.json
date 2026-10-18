@@ -1,0 +1,19 @@
+{
+  "eyebrow": "Accuracy test",
+  "title": "iPhone 18 Pro Max 256GB Black",
+  "subtitle": "T-Mobile · Apple Upgrade · test run to compare against the Apple Store app",
+  "product_name": "iPhone 18 Pro Max 256GB Black (T-Mobile, Apple Upgrade)",
+  "product_url": "https://www.apple.com/shop/buy-iphone/iphone-18-pro/6.9-inch-display-256gb-black-t-mobile-apple-upgrade",
+  "checkout_reminder": "This is a test run; no need to order",
+  "part": "",
+  "extra_params": {},
+  "search_locations": ["92626"],
+  "stores": ["South Coast Plaza", "Fashion Island", "Irvine Spectrum Center", "Brea Mall"],
+  "start": "2026-10-17T00:00:00-07:00",
+  "interval_seconds": 60,
+  "error_alert_after": 15,
+  "status_label": "tracker-status-test",
+  "status_title": "Test tracker status: iPhone 18 Pro Max (live)",
+  "alert_label": "pickup-alert-test",
+  "handoff": false
+}
