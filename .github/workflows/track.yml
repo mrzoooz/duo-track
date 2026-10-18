@@ -1,0 +1,34 @@
+name: track
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # watchdog: starts a tracker run if none is active
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "poll | once | diagnose | test-notify"
+        type: choice
+        options: [poll, once, diagnose, test-notify]
+        default: poll
+      handoff_from:
+        description: "internal: run id of the run that started this one"
+        default: ""
+
+permissions:
+  actions: write   # dispatch the next run at the ~6h job limit
+  issues: write    # backup alert via an issue that @mentions you
+  contents: read
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - name: Track pickup availability
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          MODE: ${{ inputs.mode || 'poll' }}
+          HANDOFF_FROM: ${{ inputs.handoff_from }}
+        run: python3 track.py --mode "$MODE" --max-minutes 340 --handoff-from "$HANDOFF_FROM"
