@@ -18,11 +18,12 @@ South Coast Plaza, Fashion Island, Irvine Spectrum Center, Brea Mall and Los Cer
 - After each check it rewrites the JSON in the open issue labeled `tracker-status` ("Tracker status (live)"). The status
   page reads that issue through the public GitHub API, which allows browser requests. Edits to an issue body don't send
   notifications.
-- One run polls for ~5h40m, then starts its successor before GitHub's 6-hour job limit. A schedule every 15 minutes
-  acts as a watchdog that starts a run if none is active.
+- Apple starts answering HTTP 541 to a runner's IP after roughly an hour of once-a-minute checks, so each run polls
+  for ~40 minutes and then starts its successor on a fresh runner (usually a new IP). A run that gets 3 errors in a
+  row hands off right away. A schedule every 15 minutes acts as a watchdog that starts a run if none is active.
 
 Alert issues (label `pickup-alert`) are opened when a store first shows pickup, and once if Apple requests fail 15 times
-in a row. AppleCare+, the payment schedule and the lease term are checkout choices and don't affect stock. The alert
+in a row across runs (checks then slow to every 5 minutes until Apple answers again). AppleCare+, the payment schedule and the lease term are checkout choices and don't affect stock. The alert
 lists them so you can select them when you order.
 
 ## Manual runs

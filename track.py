@@ -168,7 +168,14 @@ class StatusBoard:
         log(f"event: {text}")
         self.events = ([{"at": now_iso(), "text": text}] + self.events)[:40]
 
-    def publish(self, results, error, checked_at):
+    def failure_streak(self):
+        """Consecutive failed checks carried over from the previous run, if it handed off just now."""
+        updated = self.previous.get("updated_at")
+        if not updated or datetime.now(timezone.utc) - datetime.fromisoformat(updated) > timedelta(minutes=10):
+            return 0
+        return self.previous.get("failure_streak", 0)
+
+    def publish(self, results, error, checked_at, failure_streak=0):
         status = {
             "eyebrow": self.cfg.get("eyebrow", "Apple Store pickup tracker"),
             "title": self.cfg["title"],
@@ -180,6 +187,7 @@ class StatusBoard:
             "checked_at": checked_at,
             "updated_at": now_iso(),
             "error": error,
+            "failure_streak": failure_streak,
             "stores": results,
             "events": self.events,
             "run_url": (f"{os.environ.get('GITHUB_SERVER_URL')}/{os.environ.get('GITHUB_REPOSITORY')}"
@@ -283,7 +291,10 @@ def poll(cfg, config, handoff_from, max_minutes):
     deadline = time.monotonic() + max_minutes * 60 if max_minutes else None
     alerted = board.recently_available()
     results, checked_at = board.previous.get("stores", []), board.previous.get("checked_at")
-    failures = 0
+    # Apple starts answering 541 to a runner IP after roughly an hour of checks, so runs are short
+    # and a run that keeps failing hands off early to a fresh runner (usually a new IP).
+    failures = 0                      # this run
+    streak = board.failure_streak()   # across handoffs
     last_run_check = time.monotonic()
     while True:
         t0 = time.monotonic()
@@ -291,18 +302,24 @@ def poll(cfg, config, handoff_from, max_minutes):
         try:
             results, checked_at = check(cfg), now_iso()
             log(summarize(results))
-            if failures >= cfg["error_alert_after"]:
+            if streak >= cfg["error_alert_after"]:
                 board.event("Apple checks working again")
-            failures = 0
+            failures = streak = 0
         except Exception as e:
             error = describe_error(e)
             failures += 1
-            log(f"check failed ({failures} in a row): {error}")
-            if failures == cfg["error_alert_after"]:
+            streak += 1
+            log(f"check failed ({failures} in a row this run, {streak} overall): {error}")
+            if streak == cfg["error_alert_after"]:
                 board.event(f"Apple checks failing ({error})")
                 alert(cfg, f"{cfg.get('alert_prefix', '')}{cfg['title']} tracker can't reach Apple",
-                      f"{failures} checks in a row failed ({error}). Check the Apple Store app manually "
+                      f"{streak} checks in a row failed ({error}). Check the Apple Store app manually "
                       "until this recovers.")
+            if failures >= cfg.get("rotate_after_failures", 3) and IN_ACTIONS and cfg.get("handoff", True):
+                board.event(f"Switched to a fresh runner after {error}")
+                board.publish(results, error, checked_at, streak)
+                dispatch_next_run(config)
+                return
         if error is None:
             available = {r["name"] for r in results if r["available"]}
             new, gone = available - alerted, alerted - available
@@ -314,7 +331,7 @@ def poll(cfg, config, handoff_from, max_minutes):
             if gone:
                 board.event(f"Pickup no longer showing: {', '.join(sorted(gone))}")
             alerted = available
-        board.publish(results, error, checked_at)
+        board.publish(results, error, checked_at, streak)
 
         if deadline and time.monotonic() >= deadline:
             if IN_ACTIONS and cfg.get("handoff", True):
@@ -328,7 +345,8 @@ def poll(cfg, config, handoff_from, max_minutes):
             if should_exit(config, handoff_from):
                 log("an older tracker run is active; exiting")
                 return
-        time.sleep(max(1, cfg["interval_seconds"] - (time.monotonic() - t0)))
+        interval = cfg["interval_seconds"] if streak < cfg["error_alert_after"] else max(cfg["interval_seconds"], 300)
+        time.sleep(max(1, interval - (time.monotonic() - t0)))
 
 
 def main():

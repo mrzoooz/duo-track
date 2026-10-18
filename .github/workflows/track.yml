@@ -18,13 +18,13 @@ on:
         default: config.json
       minutes:
         description: "poll mode: minutes before this run ends (and hands off, unless the config disables it)"
-        default: "340"
+        default: "40"
       handoff_from:
         description: "internal: run id of the run that started this one"
         default: ""
 
 permissions:
-  actions: write   # dispatch the next run at the ~6h job limit
+  actions: write   # dispatch the next run (every ~40 min, or early if Apple blocks this runner)
   issues: write    # live status issue for the Pages dashboard + alert issues that @mention you
   contents: read
 
@@ -39,6 +39,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MODE: ${{ inputs.mode || 'poll' }}
           CONFIG: ${{ inputs.config || 'config.json' }}
-          MINUTES: ${{ inputs.minutes || '340' }}
+          MINUTES: ${{ inputs.minutes || '40' }}
           HANDOFF_FROM: ${{ inputs.handoff_from }}
         run: python3 track.py --mode "$MODE" --config "$CONFIG" --max-minutes "$MINUTES" --handoff-from "$HANDOFF_FROM"
