@@ -153,6 +153,8 @@ class StatusBoard:
             if found:
                 self.number = found[0]["number"]
                 self.previous = parse_status(found[0].get("body") or "")
+                if self.previous.get("product") != cfg["product_name"]:
+                    self.previous = {}  # config now tracks a different product: start its history fresh
         except Exception as e:
             log(f"status issue lookup failed: {describe_error(e)}")
         self.events = self.previous.get("events", [])

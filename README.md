@@ -33,8 +33,8 @@ Actions → **track** → **Run workflow**, then pick a mode:
 - `diagnose`: one check with per-store details
 - `once`: one check
 
-The **config** input picks what to track: `config.json` (the Duo) or `tests/iphone-18-pro-max.json`, an accuracy
-test that writes to its own status issue (view it at https://mrzoooz.github.io/duo-track/?label=tracker-status-test),
+The **config** input picks what to track: `config.json` (the Duo) or `tests/test.json` (currently iPhone 18 Pro 256GB Glacier), an
+accuracy test that writes to its own status issue (view it at https://mrzoooz.github.io/duo-track/?label=tracker-status-test),
 labels its alerts `[TEST]`, and switches runners like the main tracker but stops for good after 2 hours
 (`max_total_minutes`).
 

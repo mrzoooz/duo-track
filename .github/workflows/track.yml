@@ -14,7 +14,7 @@ on:
       config:
         description: "which product config to track"
         type: choice
-        options: [config.json, tests/iphone-18-pro-max.json]
+        options: [config.json, tests/test.json]
         default: config.json
       minutes:
         description: "poll mode: minutes before this run hands off to a fresh runner"
