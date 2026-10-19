@@ -40,6 +40,12 @@ labels its alerts `[TEST]`, and switches runners like the main tracker but stops
 
 Locally: `python3 track.py --mode once` (no dependencies).
 
+## Pause it
+
+Set `start` in the config to when polling should resume (e.g. `2026-10-23T00:00:00-07:00`) and cancel the running run.
+Runs started before then post a "paused until" notice to the status page and exit without contacting Apple; the
+scheduled watchdog starts polling again once `start` passes.
+
 ## Stop it
 
 Actions → **track** → `···` → **Disable workflow** (then cancel any running run). Close the "Tracker status (live)" issue

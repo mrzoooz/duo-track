@@ -177,7 +177,7 @@ class StatusBoard:
             return 0
         return self.previous.get("failure_streak", 0)
 
-    def publish(self, results, error, checked_at, failure_streak=0, stopped=False):
+    def publish(self, results, error, checked_at, failure_streak=0, stopped=False, paused_until=None):
         status = {
             "eyebrow": self.cfg.get("eyebrow", "Apple Store pickup tracker"),
             "title": self.cfg["title"],
@@ -191,6 +191,7 @@ class StatusBoard:
             "error": error,
             "failure_streak": failure_streak,
             "stopped_at": now_iso() if stopped else None,
+            "paused_until": paused_until,
             "stores": results,
             "events": self.events,
             "run_url": (f"{os.environ.get('GITHUB_SERVER_URL')}/{os.environ.get('GITHUB_REPOSITORY')}"
@@ -284,6 +285,12 @@ def poll(cfg, config, handoff_from, max_minutes, until=""):
     start = datetime.fromisoformat(cfg["start"])
     if datetime.now(timezone.utc) < start:
         log(f"not polling until {start.astimezone(PT):%a %b %d %H:%M %Z}")
+        if IN_ACTIONS:  # tell the status page once; scheduled runs start polling at "start"
+            board = StatusBoard(cfg)
+            if board.previous.get("paused_until") != cfg["start"]:
+                board.event(f"Paused until {both_times(cfg['start'])}")
+                board.publish(board.previous.get("stores", []), None, board.previous.get("checked_at"),
+                              paused_until=cfg["start"])
         return
     if IN_ACTIONS and should_exit(config, handoff_from, retries=2):
         log("another tracker run is active; exiting")
