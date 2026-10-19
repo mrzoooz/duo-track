@@ -5,8 +5,10 @@
   "product_name": "iPhone 18 Pro 256GB Glacier (T-Mobile, Apple Upgrade)",
   "product_url": "https://www.apple.com/shop/buy-iphone/iphone-18-pro/6.3-inch-display-256gb-glacier-t-mobile-apple-upgrade",
   "checkout_reminder": "This is a test run; no need to order",
-  "part": "",
-  "extra_params": {},
+  "part": "MJQ64LL/A",
+  "extra_params": {
+    "cppart": "TMOBILE_IPHONE18PRO"
+  },
   "search_locations": [
     "92626"
   ],
