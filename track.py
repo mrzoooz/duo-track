@@ -93,6 +93,7 @@ def check(cfg):
         results.append({
             "name": want,
             "number": (store or {}).get("storeNumber"),
+            "city": (store or {}).get("city"),
             "display": info.get("pickupDisplay", "no data") if store else "not found",
             "quote": strip_html(info.get("pickupSearchQuote", "")),
             "title": info.get("messageTypes", {}).get("regular", {}).get("storePickupProductTitle"),
@@ -304,6 +305,11 @@ def poll(cfg, config, handoff_from, max_minutes, until=""):
     def can_continue():
         return (IN_ACTIONS and cfg.get("handoff", True)
                 and (end is None or datetime.now(timezone.utc) < end - timedelta(minutes=1)))
+
+    # Keep each runner under ~max_requests_per_runner Apple requests (one per search location per check).
+    per_runner = max(1, cfg.get("max_requests_per_runner", 40) * cfg["interval_seconds"] / 60
+                     / len(cfg["search_locations"]))
+    max_minutes = min(max_minutes, per_runner) if max_minutes else per_runner
 
     board = StatusBoard(cfg)
     if not handoff_from:

@@ -1,7 +1,7 @@
 # duo-track
 
 Checks Apple Store in-store pickup for **iPhone Duo 256GB Night Sky (T-Mobile, Apple Upgrade)** every minute at
-South Coast Plaza, Fashion Island, Irvine Spectrum Center, Brea Mall and Los Cerritos.
+South Coast Plaza, Fashion Island, Irvine Spectrum Center, Brea Mall, Los Cerritos and Walnut Street (Philadelphia).
 
 - **Status page:** https://mrzoooz.github.io/duo-track/ (GitHub Pages, `docs/index.html`). Live per-store status,
   last check time, recent activity, and an optional sound alarm while the page is open.
@@ -13,13 +13,14 @@ South Coast Plaza, Fashion Island, Irvine Spectrum Center, Brea Mall and Los Cer
 `.github/workflows/track.yml` runs `track.py` on GitHub Actions (free for public repos).
 
 - It reads Apple's `/shop/retail/pickup-message` endpoint for part `MK1F4LL/A`, carrier `TMOBILE_IPHONEDUO`, near
-  92626. That returns the same "Pickup:" line the product page shows. The browser's `/shop/fulfillment-messages`
+  92626 and 19103 (one request each per check). That returns the same "Pickup:" line the product page shows. The browser's `/shop/fulfillment-messages`
   endpoint answers HTTP 541 to GitHub's servers, so the tracker doesn't use it.
 - After each check it rewrites the JSON in the open issue labeled `tracker-status` ("Tracker status (live)"). The status
   page reads that issue through the public GitHub API, which allows browser requests. Edits to an issue body don't send
   notifications.
-- Apple starts answering HTTP 541 to a runner's IP after roughly an hour of once-a-minute checks, so each run polls
-  for ~40 minutes and then starts its successor on a fresh runner (usually a new IP). A run that gets 3 errors in a
+- Apple starts answering HTTP 541 to a runner's IP after roughly an hour of once-a-minute checks, so each run makes at
+  most ~40 Apple requests (~20 minutes with two search locations) and then starts its successor on a fresh runner
+  (usually a new IP). A run that gets 3 errors in a
   row hands off right away. A schedule every 15 minutes acts as a watchdog that starts a run if none is active.
 
 Alert issues (label `pickup-alert`) are opened when a store first shows pickup, and once if Apple requests fail 15 times

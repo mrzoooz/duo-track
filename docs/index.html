@@ -265,7 +265,7 @@
     $("stores").innerHTML = stores.length ? stores.map((s) => `
       <li class="store">
         <div>
-          <div class="name">${esc(s.name)}${s.number ? `<span class="num">${esc(s.number)}</span>` : ""}</div>
+          <div class="name">${esc(s.name)}${s.number ? `<span class="num">${esc([s.number, s.city].filter(Boolean).join(" · "))}</span>` : ""}</div>
           ${s.quote ? `<div class="quote">${esc(s.quote)}</div>` : ""}
         </div>
         ${pill(s)}

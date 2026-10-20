@@ -10,14 +10,16 @@
     "cppart": "TMOBILE_IPHONE18PRO"
   },
   "search_locations": [
-    "92626"
+    "92626",
+    "19103"
   ],
   "stores": [
     "South Coast Plaza",
     "Fashion Island",
     "Irvine Spectrum Center",
     "Brea Mall",
-    "Los Cerritos"
+    "Los Cerritos",
+    "Walnut Street"
   ],
   "start": "2026-10-17T00:00:00-07:00",
   "interval_seconds": 60,
