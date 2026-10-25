@@ -26,8 +26,6 @@ UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
 # /shop/fulfillment-messages (what the browser uses) answers 541 to GitHub Actions IPs;
 # this older endpoint returns the same per-store pickup data.
 PICKUP_URL = "https://www.apple.com/shop/retail/pickup-message"
-# Apple's "Your Saves" list: a setup saved there keeps every selection (lease term, AppleCare+), unlike the product URL.
-SAVES_URL = "https://www.apple.com/shop/yoursaves"
 WORKFLOW_FILE = "track.yml"
 IN_ACTIONS = os.environ.get("GITHUB_ACTIONS") == "true"
 
@@ -137,8 +135,8 @@ def alert(cfg, title, text):
             "title": title,
             "labels": [cfg.get("alert_label", "pickup-alert")],
             "body": (f"@{owner} {text}\n\nDetected {both_times()}.\n\n"
-                     f"**[Open Your Saves]({SAVES_URL})** (fastest if your setup is saved there) · "
-                     f"[Order page]({cfg['product_url']}). Select: {cfg['checkout_reminder']}"),
+                     f"**[Order now]({cfg.get('order_url', cfg['product_url'])})**. "
+                     f"Select: {cfg['checkout_reminder']}"),
         })
     except Exception as e:
         log(f"alert issue failed: {describe_error(e)}")
@@ -194,8 +192,7 @@ class StatusBoard:
             "title": self.cfg["title"],
             "subtitle": self.cfg.get("subtitle", ""),
             "product": self.cfg["product_name"],
-            "product_url": self.cfg["product_url"],
-            "saves_url": SAVES_URL,
+            "product_url": self.cfg.get("order_url", self.cfg["product_url"]),
             "checkout_reminder": self.cfg["checkout_reminder"],
             "interval_seconds": self.cfg["interval_seconds"],
             "checked_at": checked_at,
@@ -314,13 +311,14 @@ def diagnose(cfg):
         f"selection={selection.group(1) if selection else None}")
     slug = cfg["product_url"].split("/shop/")[1].rsplit("/", 1)[0]
     links = sorted(set(re.findall(re.escape(slug) + r"/[a-z0-9.-]+(?:[?#][^\"'\s<]*)?", page)))
-    saves = sorted(set(re.findall(r"[^\"'\s<>]*(?:saved|saves|favorite)[^\"'\s<>]*", page, re.I)))
     keys = sorted(set(re.findall(r'"formKey"\s*:\s*"([^"]+)"', page)))
     log(f"product links: {links[:40]}")
-    log(f"saves links: {saves[:20]}")
     log(f"form keys: {keys}")
     for m in list(re.finditer(r'productSelectionUrl|"term"|appleCare|applecare', page))[:6]:
         log(f"context: {page[max(0, m.start() - 120):m.end() + 240]!r}")
+    if cfg.get("order_url", cfg["product_url"]) != cfg["product_url"]:
+        order_sel = re.search(r"uniqueProductSelection\s*=\s*(\{.*?\});", http(cfg["order_url"]))
+        log(f"order link {cfg['order_url']} preselects: {order_sel.group(1) if order_sel else None}")
     if not cfg.get("part") and skus:
         cfg["part"] = skus[0].split("+")[0]
     if selection and "cppart" not in cfg.get("extra_params", {}):

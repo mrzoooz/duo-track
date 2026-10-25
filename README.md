@@ -25,8 +25,8 @@ South Coast Plaza, Fashion Island, Irvine Spectrum Center, Brea Mall, Los Cerrit
 
 Alert issues (label `pickup-alert`) are opened when a store first shows pickup, and once if Apple requests fail 15 times
 in a row across runs (checks then slow to every 5 minutes until Apple answers again). AppleCare+, the payment schedule and the lease term are checkout choices and don't affect stock. The alert
-lists them so you can select them when you order, and links to Apple's Your Saves list
-(https://www.apple.com/shop/yoursaves): a setup saved there keeps every selection, which the product URL can't.
+lists them so you can select them when you order. Its link (`order_url`) opens the product page with color, storage,
+carrier and Apple Upgrade preselected. Apple's Your Saves only keeps color and storage, so it isn't used.
 
 ## Manual runs
 
