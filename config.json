@@ -9,8 +9,7 @@
     "cppart": "TMOBILE_IPHONEDUO"
   },
   "search_locations": [
-    "92626",
-    "19103"
+    "92626"
   ],
   "stores": [
     "South Coast Plaza",
@@ -18,8 +17,7 @@
     "Irvine Spectrum Center",
     "Brea Mall",
     "Los Cerritos",
-    "Mission Viejo",
-    "Walnut Street"
+    "Mission Viejo"
   ],
   "start": "2026-10-23T00:00:00-07:00",
   "interval_seconds": 30,
