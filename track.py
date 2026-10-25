@@ -80,26 +80,32 @@ def is_available(info):
     return info.get("pickupDisplay") == "available" or quote.lower().startswith("available")
 
 
+def store_status(name, store, part):
+    info = (store or {}).get("partsAvailability", {}).get(part, {})
+    return {
+        "name": name,
+        "number": (store or {}).get("storeNumber"),
+        "city": (store or {}).get("city"),
+        "display": info.get("pickupDisplay", "no data") if store else "not found",
+        "quote": strip_html(info.get("pickupSearchQuote", "")),
+        "title": info.get("messageTypes", {}).get("regular", {}).get("storePickupProductTitle"),
+        "available": is_available(info),
+    }
+
+
 def check(cfg):
-    """One lookup; returns [{name, number, display, quote, available}] for each configured store."""
+    """One lookup. Returns (configured stores' statuses, statuses of the other nearby stores Apple returned)."""
     seen = {}
     for loc in cfg["search_locations"]:
         for s in fetch_stores(cfg, loc):
             seen.setdefault(s.get("storeName", ""), s)
-    results = []
+    results, tracked = [], set()
     for want in cfg["stores"]:
-        store = next((s for name, s in seen.items() if want.lower() in name.lower()), None)
-        info = (store or {}).get("partsAvailability", {}).get(cfg["part"], {})
-        results.append({
-            "name": want,
-            "number": (store or {}).get("storeNumber"),
-            "city": (store or {}).get("city"),
-            "display": info.get("pickupDisplay", "no data") if store else "not found",
-            "quote": strip_html(info.get("pickupSearchQuote", "")),
-            "title": info.get("messageTypes", {}).get("regular", {}).get("storePickupProductTitle"),
-            "available": is_available(info),
-        })
-    return results
+        name, store = next(((n, s) for n, s in seen.items() if want.lower() in n.lower()), (None, None))
+        tracked.add(name)
+        results.append(store_status(want, store, cfg["part"]))
+    others = [store_status(n, s, cfg["part"]) for n, s in seen.items() if n not in tracked]
+    return results, others
 
 
 def summarize(results):
@@ -147,6 +153,7 @@ class StatusBoard:
         self.number = None
         self.previous = {}
         self.events = []
+        self.extra = {}
         if not IN_ACTIONS:
             return
         try:
@@ -195,6 +202,7 @@ class StatusBoard:
             "paused_until": paused_until,
             "stores": results,
             "events": self.events,
+            **self.extra,
             "run_url": (f"{os.environ.get('GITHUB_SERVER_URL')}/{os.environ.get('GITHUB_REPOSITORY')}"
                         f"/actions/runs/{os.environ.get('GITHUB_RUN_ID')}"),
         }
@@ -307,7 +315,9 @@ def diagnose(cfg):
         if carrier:
             cfg.setdefault("extra_params", {})["cppart"] = carrier
     log(f"checking part={cfg['part']} params={cfg.get('extra_params')}")
-    for r in check(cfg):
+    results, others = check(cfg)
+    log("untracked nearby: " + ", ".join(f"{o['name']} [{o['number']}] {o['display']} ({o['quote']})" for o in others))
+    for r in results:
         log(f"{r['name']} [{r['number']}] {cfg['part']} '{r['title']}': pickupDisplay={r['display']} "
             f"quote={r['quote']!r} available={r['available']}")
 
@@ -354,12 +364,16 @@ def poll(cfg, config, handoff_from, max_minutes, until=""):
     # and a run that keeps failing hands off early to a fresh runner (usually a new IP).
     failures = 0                      # this run
     streak = board.failure_streak()   # across handoffs
+    # History only (no email): changes in Apple's message at tracked stores, and untracked nearby stores with pickup.
+    last_quotes = {r["name"]: r.get("quote") or r.get("display") for r in results}
+    untracked_open = set(board.previous.get("untracked_open", []))
+    board.extra["untracked_open"] = sorted(untracked_open)
     last_run_check = time.monotonic()
     while True:
         t0 = time.monotonic()
         error = None
         try:
-            results, checked_at = check(cfg), now_iso()
+            (results, others), checked_at = check(cfg), now_iso()
             log(summarize(results))
             if streak >= cfg["error_alert_after"]:
                 board.event("Apple checks working again")
@@ -390,6 +404,28 @@ def poll(cfg, config, handoff_from, max_minutes, until=""):
             if gone:
                 board.event(f"Pickup no longer showing: {', '.join(sorted(gone))}")
             alerted = available
+
+            changes = {}
+            for r in results:
+                old_q, new_q = last_quotes.get(r["name"]), r["quote"] or r["display"]
+                if old_q and new_q != old_q and r["name"] not in new | gone:
+                    changes.setdefault((old_q, new_q), []).append(r["name"])
+            for (old_q, new_q), names in changes.items():
+                who = f"All {len(names)} stores" if len(names) == len(results) > 1 else ", ".join(names)
+                board.event(f"{who}: “{old_q}” → “{new_q}”")
+            last_quotes = {r["name"]: r["quote"] or r["display"] for r in results}
+
+            open_elsewhere = {o["name"]: o["quote"] or o["display"] for o in others if o["available"]}
+            if open_elsewhere:
+                log("untracked stores showing pickup: " + ", ".join(f"{n} ({q})" for n, q in open_elsewhere.items()))
+            if set(open_elsewhere) != untracked_open:
+                if open_elsewhere:
+                    board.event("Pickup at stores you don't track: "
+                                + ", ".join(f"{n} ({q})" for n, q in sorted(open_elsewhere.items())))
+                else:
+                    board.event("Pickup no longer showing at any untracked nearby store")
+                untracked_open = set(open_elsewhere)
+                board.extra["untracked_open"] = sorted(untracked_open)
         board.publish(results, error, checked_at, streak)
 
         if deadline and time.monotonic() >= deadline:
@@ -427,7 +463,7 @@ def main():
         if args.mode == "test-alert":
             alert(cfg, "Test alert from duo-track",
                   "This is a test. When pickup opens you'll get an email like this one. You can close this issue.")
-        log(summarize(check(cfg)))
+        log(summarize(check(cfg)[0]))
 
 
 if __name__ == "__main__":
