@@ -26,6 +26,8 @@ UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
 # /shop/fulfillment-messages (what the browser uses) answers 541 to GitHub Actions IPs;
 # this older endpoint returns the same per-store pickup data.
 PICKUP_URL = "https://www.apple.com/shop/retail/pickup-message"
+# Apple's "Your Saves" list: a setup saved there keeps every selection (lease term, AppleCare+), unlike the product URL.
+SAVES_URL = "https://www.apple.com/shop/yoursaves"
 WORKFLOW_FILE = "track.yml"
 IN_ACTIONS = os.environ.get("GITHUB_ACTIONS") == "true"
 
@@ -134,8 +136,9 @@ def alert(cfg, title, text):
         github_api("issues", method="POST", payload={
             "title": title,
             "labels": [cfg.get("alert_label", "pickup-alert")],
-            "body": (f"@{owner} {text}\n\nDetected {both_times()}.\n\n**[Order now]({cfg['product_url']})**. "
-                     f"Select: {cfg['checkout_reminder']}"),
+            "body": (f"@{owner} {text}\n\nDetected {both_times()}.\n\n"
+                     f"**[Open Your Saves]({SAVES_URL})** (fastest if your setup is saved there) · "
+                     f"[Order page]({cfg['product_url']}). Select: {cfg['checkout_reminder']}"),
         })
     except Exception as e:
         log(f"alert issue failed: {describe_error(e)}")
@@ -192,6 +195,7 @@ class StatusBoard:
             "subtitle": self.cfg.get("subtitle", ""),
             "product": self.cfg["product_name"],
             "product_url": self.cfg["product_url"],
+            "saves_url": SAVES_URL,
             "checkout_reminder": self.cfg["checkout_reminder"],
             "interval_seconds": self.cfg["interval_seconds"],
             "checked_at": checked_at,

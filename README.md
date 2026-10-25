@@ -1,6 +1,6 @@
 # duo-track
 
-Checks Apple Store in-store pickup for **iPhone Duo 256GB Night Sky (T-Mobile, Apple Upgrade)** every minute at
+Checks Apple Store in-store pickup for **iPhone Duo 256GB Night Sky (T-Mobile, Apple Upgrade)** every 30 seconds at
 South Coast Plaza, Fashion Island, Irvine Spectrum Center, Brea Mall, Los Cerritos and Walnut Street (Philadelphia).
 
 - **Status page:** https://mrzoooz.github.io/duo-track/ (GitHub Pages, `docs/index.html`). Live per-store status,
@@ -19,13 +19,14 @@ South Coast Plaza, Fashion Island, Irvine Spectrum Center, Brea Mall, Los Cerrit
   page reads that issue through the public GitHub API, which allows browser requests. Edits to an issue body don't send
   notifications.
 - Apple starts answering HTTP 541 to a runner's IP after roughly an hour of once-a-minute checks, so each run makes at
-  most ~40 Apple requests (~20 minutes with two search locations) and then starts its successor on a fresh runner
+  most ~40 Apple requests (~10 minutes at 30-second checks with two search locations) and then starts its successor on a fresh runner
   (usually a new IP). A run that gets 3 errors in a
   row hands off right away. A schedule every 15 minutes acts as a watchdog that starts a run if none is active.
 
 Alert issues (label `pickup-alert`) are opened when a store first shows pickup, and once if Apple requests fail 15 times
 in a row across runs (checks then slow to every 5 minutes until Apple answers again). AppleCare+, the payment schedule and the lease term are checkout choices and don't affect stock. The alert
-lists them so you can select them when you order.
+lists them so you can select them when you order, and links to Apple's Your Saves list
+(https://www.apple.com/shop/yoursaves): a setup saved there keeps every selection, which the product URL can't.
 
 ## Manual runs
 

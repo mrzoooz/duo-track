@@ -95,6 +95,9 @@
     font-family: inherit; font-size: 17px; font-weight: 600; line-height: 1.2; padding: 16px; margin-top: 16px;
   }
   .hero.live .btn { background: #fff; color: #0b6b2e; }
+  .btn + .btn { margin-top: 10px; }
+  .btn.outline { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); }
+  .hero.live .btn.outline { background: transparent; color: #fff; box-shadow: inset 0 0 0 1.5px #fff; }
   .btn.secondary { background: var(--wait-bg); color: var(--text); font-weight: 600; font-size: 15px; padding: 13px; }
   .reminder { font-size: 13px; color: var(--muted); margin: 10px 2px 0; }
   .hero.live .reminder { color: rgba(255,255,255,.85); }
@@ -146,7 +149,8 @@
     <div class="label">Pickup status</div>
     <div class="headline skeleton" id="headline">Loading…</div>
     <p class="sub" id="sub"></p>
-    <a class="btn" id="order" href="https://www.apple.com/shop/buy-iphone/iphone-duo/7.6-inch-display-256gb-night-sky-t-mobile-apple-upgrade" target="_blank" rel="noopener">Open Apple Store order page</a>
+    <a class="btn" id="saves" href="https://www.apple.com/shop/yoursaves" target="_blank" rel="noopener">Open Your Saves</a>
+    <a class="btn outline" id="order" href="https://www.apple.com/shop/buy-iphone/iphone-duo/7.6-inch-display-256gb-night-sky-t-mobile-apple-upgrade" target="_blank" rel="noopener">Open order page</a>
     <p class="reminder" id="reminder">Select: Night Sky / 256GB / Apple Upgrade 12-mo lease / T-Mobile / AppleCare+ Theft and Loss, pay annually</p>
   </section>
 
@@ -171,7 +175,7 @@
   </section>
 
   <footer>
-    <p>The tracker checks Apple every minute from GitHub Actions. When a store shows pickup, GitHub emails you, so you don't need this page open. This page refreshes itself about once a minute, so there's no need to reload it.</p>
+    <p>The tracker checks Apple every 30 seconds from GitHub Actions. When a store shows pickup, GitHub emails you, so you don't need this page open. This page refreshes itself about once a minute, so there's no need to reload it.</p>
     <p><a id="repo-link" href="https://github.com/mrzoooz/duo-track">Repository</a> · <a id="run-link" href="https://github.com/mrzoooz/duo-track/actions">Tracker run log</a></p>
   </footer>
 </main>
@@ -245,18 +249,19 @@
     if (open.length) {
       $("headline").textContent = `Pickup available at ${open.map((s) => s.name).join(", ")}`;
       $("sub").textContent = "Order now and choose in-store pickup.";
-      $("order").textContent = "Order now";
+      $("saves").textContent = "Order now from Your Saves";
     } else {
       const quotes = [...new Set(stores.map((s) => s.quote).filter(Boolean))];
       $("headline").textContent = "No pickup yet";
       $("sub").textContent = quotes.length === 1 ? `Apple says: “${quotes[0]}”` : `None of your ${stores.length} stores show pickup.`;
-      $("order").textContent = "Open Apple Store order page";
+      $("saves").textContent = "Open Your Saves";
     }
     if (status.eyebrow) $("eyebrow").textContent = status.eyebrow;
     if (status.title) $("title").textContent = status.title;
     if (status.subtitle !== undefined) $("subtitle").textContent = status.subtitle;
     $("stamps").textContent = status.checked_at ? `Last check: ${stamps(status.checked_at)}` : "";
     if (status.product_url) $("order").href = status.product_url;
+    if (status.saves_url) $("saves").href = status.saves_url;
     if (status.checkout_reminder) $("reminder").textContent = `Select: ${status.checkout_reminder}`;
     if (status.run_url) $("run-link").href = status.run_url;
     const name = status.title || "iPhone Duo";
