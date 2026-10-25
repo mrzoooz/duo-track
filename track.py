@@ -263,7 +263,37 @@ def dispatch_next_run(config, until):
 
 # --- Modes ---------------------------------------------------------------------
 
+def probe_cache(cfg):
+    """Show whether Apple's pickup endpoint is served from a cache (and how stale), with and without a cache-buster."""
+    q = [("pl", "true"), ("location", cfg["search_locations"][0]), ("parts.0", cfg["part"])]
+    q += list(cfg.get("extra_params", {}).items())
+    base = f"{PICKUP_URL}?{urllib.parse.urlencode(q)}"
+    for label, url in (("plain", base), ("plain again", base),
+                       ("busted", f"{base}&_={time.time_ns()}"), ("busted again", f"{base}&_={time.time_ns() + 1}")):
+        req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json",
+                                                   "Referer": cfg["product_url"]})
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                h = resp.headers
+                body = json.loads(resp.read())["body"]
+                quote = strip_html(body["stores"][0]["partsAvailability"][cfg["part"]].get("pickupSearchQuote"))
+                keep = {k: v for k, v in h.items() if k.lower() in (
+                    "cache-control", "expires", "age", "date", "last-modified", "etag", "vary", "x-cache",
+                    "x-cache-remote", "x-check-cacheable", "akamai-cache-status", "x-akamai-transformed",
+                    "server-timing", "x-served-by", "cdn-cache", "x-apple-request-uuid")}
+                log(f"cache probe [{label}] HTTP {resp.status} quote={quote!r} headers={keep}")
+        except urllib.error.HTTPError as e:
+            log(f"cache probe [{label}] HTTP {e.code} headers={dict(e.headers)}")
+    try:
+        http(f"https://www.apple.com/shop/fulfillment-messages?fae=true&pl=true&mts.0=regular&parts.0={cfg['part']}"
+             f"&location={cfg['search_locations'][0]}", headers={"Accept": "application/json"})
+        log("fulfillment-messages: reachable")
+    except urllib.error.HTTPError as e:
+        log(f"fulfillment-messages: HTTP {e.code}")
+
+
 def diagnose(cfg):
+    probe_cache(cfg)
     page = http(cfg["product_url"])
     title = re.search(r"<title>(.*?)</title>", page, re.S)
     skus = sorted(set(re.findall(r'"sku"\s*:\s*"([^"]+)"', page)))
