@@ -1,7 +1,8 @@
 # duo-track
 
 Checks Apple Store in-store pickup for **iPhone Duo 256GB Night Sky (T-Mobile, Apple Upgrade)** every 30 seconds at
-South Coast Plaza, Fashion Island, Irvine Spectrum Center, Brea Mall, Los Cerritos and Walnut Street (Philadelphia).
+South Coast Plaza, Fashion Island, Irvine Spectrum Center, Brea Mall, Los Cerritos, Mission Viejo and Walnut Street
+(Philadelphia).
 
 - **Status page:** https://mrzoooz.github.io/duo-track/ (GitHub Pages, `docs/index.html`). Live per-store status,
   last check time, recent activity, and an optional sound alarm while the page is open.
