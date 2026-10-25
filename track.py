@@ -308,6 +308,15 @@ def diagnose(cfg):
     selection = re.search(r"uniqueProductSelection\s*=\s*(\{.*?\});", page)
     log(f"product page: {strip_html(title.group(1)) if title else '?'} | skus={skus} | "
         f"selection={selection.group(1) if selection else None}")
+    slug = cfg["product_url"].split("/shop/")[1].rsplit("/", 1)[0]
+    links = sorted(set(re.findall(re.escape(slug) + r"/[a-z0-9.-]+(?:[?#][^\"'\s<]*)?", page)))
+    saves = sorted(set(re.findall(r"[^\"'\s<>]*(?:saved|saves|favorite)[^\"'\s<>]*", page, re.I)))
+    keys = sorted(set(re.findall(r'"formKey"\s*:\s*"([^"]+)"', page)))
+    log(f"product links: {links[:40]}")
+    log(f"saves links: {saves[:20]}")
+    log(f"form keys: {keys}")
+    for m in list(re.finditer(r'productSelectionUrl|"term"|appleCare|applecare', page))[:6]:
+        log(f"context: {page[max(0, m.start() - 120):m.end() + 240]!r}")
     if not cfg.get("part") and skus:
         cfg["part"] = skus[0].split("+")[0]
     if selection and "cppart" not in cfg.get("extra_params", {}):

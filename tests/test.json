@@ -22,7 +22,7 @@
     "Walnut Street"
   ],
   "start": "2026-10-17T00:00:00-07:00",
-  "interval_seconds": 60,
+  "interval_seconds": 30,
   "error_alert_after": 15,
   "status_title": "Test tracker status (live)",
   "alert_label": "pickup-alert-test",
