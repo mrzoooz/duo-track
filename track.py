@@ -63,11 +63,21 @@ def describe_error(e):
 
 # --- Apple -------------------------------------------------------------------
 
+def variants(cfg):
+    """Models to watch (e.g. two colors), each {name, part, product_url}; one request covers all of them.
+
+    A config without "variants" tracks its single "part"/"product_url". Variants whose part isn't known yet are skipped.
+    """
+    vs = cfg.get("variants") or [{"name": "", "part": cfg.get("part", ""), "product_url": cfg["product_url"]}]
+    return [v for v in vs if v.get("part")] or vs[:1]
+
+
 def fetch_stores(cfg, location):
-    q = [("pl", "true"), ("location", location), ("parts.0", cfg["part"])]
+    vs = variants(cfg)
+    q = [("pl", "true"), ("location", location)] + [(f"parts.{i}", v["part"]) for i, v in enumerate(vs)]
     q += list(cfg.get("extra_params", {}).items())
     body = json.loads(http(f"{PICKUP_URL}?{urllib.parse.urlencode(q)}",
-                           headers={"Accept": "application/json", "Referer": cfg["product_url"]}))["body"]
+                           headers={"Accept": "application/json", "Referer": vs[0]["product_url"]}))["body"]
     if "content" in body:  # fulfillment-messages shape
         body = body["content"]["pickupMessage"]
     if "stores" not in body:
@@ -80,17 +90,34 @@ def is_available(info):
     return info.get("pickupDisplay") == "available" or quote.lower().startswith("available")
 
 
-def store_status(name, store, part):
-    info = (store or {}).get("partsAvailability", {}).get(part, {})
+def store_status(name, store, vs):
+    per = []
+    for v in vs:
+        info = (store or {}).get("partsAvailability", {}).get(v["part"], {})
+        per.append({
+            "variant": v["name"],
+            "display": info.get("pickupDisplay", "no data") if store else "not found",
+            "quote": strip_html(info.get("pickupSearchQuote", "")),
+            "title": info.get("messageTypes", {}).get("regular", {}).get("storePickupProductTitle"),
+            "available": is_available(info),
+        })
+    open_ = [p for p in per if p["available"]]
     return {
         "name": name,
         "number": (store or {}).get("storeNumber"),
         "city": (store or {}).get("city"),
-        "display": info.get("pickupDisplay", "no data") if store else "not found",
-        "quote": strip_html(info.get("pickupSearchQuote", "")),
-        "title": info.get("messageTypes", {}).get("regular", {}).get("storePickupProductTitle"),
-        "available": is_available(info),
+        "display": (open_ or per)[0]["display"],
+        "quote": per[0]["quote"] if len(per) == 1 else " · ".join(f"{p['variant']}: {p['quote'] or p['display']}"
+                                                                   for p in per),
+        "available": bool(open_),
+        "variants": per,
     }
+
+
+def available_keys(results):
+    """Store (and, when several variants are watched, color) combinations showing pickup."""
+    return {r["name"] if len(r.get("variants", [])) <= 1 else f"{r['name']} ({p['variant']})"
+            for r in results for p in r.get("variants", [r]) if p["available"]}
 
 
 def check(cfg):
@@ -103,8 +130,8 @@ def check(cfg):
     for want in cfg["stores"]:
         name, store = next(((n, s) for n, s in seen.items() if want.lower() in n.lower()), (None, None))
         tracked.add(name)
-        results.append(store_status(want, store, cfg["part"]))
-    others = [store_status(n, s, cfg["part"]) for n, s in seen.items() if n not in tracked]
+        results.append(store_status(want, store, variants(cfg)))
+    others = [store_status(n, s, variants(cfg)) for n, s in seen.items() if n not in tracked]
     return results, others
 
 
@@ -126,17 +153,17 @@ def github_api(path, payload=None, method="GET"):
     return json.loads(body) if body else {}
 
 
-def alert(cfg, title, text):
+def alert(cfg, title, text, vs=None):
     """Open an issue that @mentions the repo owner, which GitHub delivers by email / GitHub app."""
     log(f"ALERT: {title}")
     owner = os.environ.get("GITHUB_REPOSITORY_OWNER", "")
+    vs = vs or variants(cfg)[:1]
+    links = " · ".join(f"**[Order {v['name'] or 'now'}]({v['product_url']})**" for v in vs)
     try:
         github_api("issues", method="POST", payload={
             "title": title,
             "labels": [cfg.get("alert_label", "pickup-alert")],
-            "body": (f"@{owner} {text}\n\nDetected {both_times()}.\n\n"
-                     f"**[Order now]({cfg.get('order_url', cfg['product_url'])})**. "
-                     f"Select: {cfg['checkout_reminder']}"),
+            "body": f"@{owner} {text}\n\nDetected {both_times()}.\n\n{links}. Select: {cfg['checkout_reminder']}",
         })
     except Exception as e:
         log(f"alert issue failed: {describe_error(e)}")
@@ -162,17 +189,19 @@ class StatusBoard:
             if found:
                 self.number = found[0]["number"]
                 self.previous = parse_status(found[0].get("body") or "")
-                if self.previous.get("product") != cfg["product_name"]:
+                if self.previous.get("history_id", self.previous.get("product")) != history_id(cfg):
                     self.previous = {}  # config now tracks a different product: start its history fresh
         except Exception as e:
             log(f"status issue lookup failed: {describe_error(e)}")
         self.events = self.previous.get("events", [])
 
     def recently_available(self):
-        """Stores the last run already alerted on, so a handoff doesn't alert twice."""
+        """Store/color combinations the last run already alerted on, so a handoff doesn't alert twice."""
         checked = self.previous.get("checked_at")
         if not checked or datetime.now(timezone.utc) - datetime.fromisoformat(checked) > timedelta(minutes=30):
             return set()
+        if "alerted" in self.previous:
+            return set(self.previous["alerted"])
         return {s["name"] for s in self.previous.get("stores", []) if s.get("available")}
 
     def event(self, text):
@@ -192,7 +221,9 @@ class StatusBoard:
             "title": self.cfg["title"],
             "subtitle": self.cfg.get("subtitle", ""),
             "product": self.cfg["product_name"],
-            "product_url": self.cfg.get("order_url", self.cfg["product_url"]),
+            "history_id": history_id(self.cfg),
+            "product_url": variants(self.cfg)[0]["product_url"],
+            "variants": [{"name": v["name"], "url": v["product_url"]} for v in variants(self.cfg)],
             "checkout_reminder": self.cfg["checkout_reminder"],
             "interval_seconds": self.cfg["interval_seconds"],
             "checked_at": checked_at,
@@ -224,6 +255,11 @@ class StatusBoard:
                 self.number = None
         except Exception as e:
             log(f"status publish failed: {describe_error(e)}")
+
+
+def history_id(cfg):
+    """Identifies a status history; the board starts fresh when it changes (defaults to the product name)."""
+    return cfg.get("history_id", cfg["product_name"])
 
 
 def parse_status(body):
@@ -274,18 +310,19 @@ def dispatch_next_run(config, until):
 
 def probe_cache(cfg):
     """Show whether Apple's pickup endpoint is served from a cache (and how stale), with and without a cache-buster."""
-    q = [("pl", "true"), ("location", cfg["search_locations"][0]), ("parts.0", cfg["part"])]
+    v = variants(cfg)[0]
+    q = [("pl", "true"), ("location", cfg["search_locations"][0]), ("parts.0", v["part"])]
     q += list(cfg.get("extra_params", {}).items())
     base = f"{PICKUP_URL}?{urllib.parse.urlencode(q)}"
     for label, url in (("plain", base), ("plain again", base),
                        ("busted", f"{base}&_={time.time_ns()}"), ("busted again", f"{base}&_={time.time_ns() + 1}")):
         req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json",
-                                                   "Referer": cfg["product_url"]})
+                                                   "Referer": v["product_url"]})
         try:
             with urllib.request.urlopen(req, timeout=20) as resp:
                 h = resp.headers
                 body = json.loads(resp.read())["body"]
-                quote = strip_html(body["stores"][0]["partsAvailability"][cfg["part"]].get("pickupSearchQuote"))
+                quote = strip_html(body["stores"][0]["partsAvailability"][v["part"]].get("pickupSearchQuote"))
                 keep = {k: v for k, v in h.items() if k.lower() in (
                     "cache-control", "expires", "age", "date", "last-modified", "etag", "vary", "x-cache",
                     "x-cache-remote", "x-check-cacheable", "akamai-cache-status", "x-akamai-transformed",
@@ -294,7 +331,7 @@ def probe_cache(cfg):
         except urllib.error.HTTPError as e:
             log(f"cache probe [{label}] HTTP {e.code} headers={dict(e.headers)}")
     try:
-        http(f"https://www.apple.com/shop/fulfillment-messages?fae=true&pl=true&mts.0=regular&parts.0={cfg['part']}"
+        http(f"https://www.apple.com/shop/fulfillment-messages?fae=true&pl=true&mts.0=regular&parts.0={v['part']}"
              f"&location={cfg['search_locations'][0]}", headers={"Accept": "application/json"})
         log("fulfillment-messages: reachable")
     except urllib.error.HTTPError as e:
@@ -303,34 +340,27 @@ def probe_cache(cfg):
 
 def diagnose(cfg):
     probe_cache(cfg)
-    page = http(cfg["product_url"])
-    title = re.search(r"<title>(.*?)</title>", page, re.S)
-    skus = sorted(set(re.findall(r'"sku"\s*:\s*"([^"]+)"', page)))
-    selection = re.search(r"uniqueProductSelection\s*=\s*(\{.*?\});", page)
-    log(f"product page: {strip_html(title.group(1)) if title else '?'} | skus={skus} | "
-        f"selection={selection.group(1) if selection else None}")
-    slug = cfg["product_url"].split("/shop/")[1].rsplit("/", 1)[0]
-    links = sorted(set(re.findall(re.escape(slug) + r"/[a-z0-9.-]+(?:[?#][^\"'\s<]*)?", page)))
-    keys = sorted(set(re.findall(r'"formKey"\s*:\s*"([^"]+)"', page)))
-    log(f"product links: {links[:40]}")
-    log(f"form keys: {keys}")
-    for m in list(re.finditer(r'productSelectionUrl|"term"|appleCare|applecare', page))[:6]:
-        log(f"context: {page[max(0, m.start() - 120):m.end() + 240]!r}")
-    if cfg.get("order_url", cfg["product_url"]) != cfg["product_url"]:
-        order_sel = re.search(r"uniqueProductSelection\s*=\s*(\{.*?\});", http(cfg["order_url"]))
-        log(f"order link {cfg['order_url']} preselects: {order_sel.group(1) if order_sel else None}")
-    if not cfg.get("part") and skus:
-        cfg["part"] = skus[0].split("+")[0]
-    if selection and "cppart" not in cfg.get("extra_params", {}):
-        carrier = json.loads(selection.group(1)).get("carrierModel")
-        if carrier:
-            cfg.setdefault("extra_params", {})["cppart"] = carrier
-    log(f"checking part={cfg['part']} params={cfg.get('extra_params')}")
+    for v in cfg.get("variants") or [cfg]:
+        page = http(v["product_url"])
+        title = re.search(r"<title>(.*?)</title>", page, re.S)
+        skus = sorted(set(re.findall(r'"sku"\s*:\s*"([^"]+)"', page)))
+        selection = re.search(r"uniqueProductSelection\s*=\s*(\{.*?\});", page)
+        log(f"product page: {strip_html(title.group(1)) if title else '?'} | skus={skus} | "
+            f"selection={selection.group(1) if selection else None}")
+        if not v.get("part") and skus:
+            v["part"] = skus[0].split("+")[0]
+            log(f"discovered part {v['part']} for {v.get('name') or v['product_url']}")
+        if selection and "cppart" not in cfg.get("extra_params", {}):
+            carrier = json.loads(selection.group(1)).get("carrierModel")
+            if carrier:
+                cfg.setdefault("extra_params", {})["cppart"] = carrier
+    log(f"checking parts={[v['part'] for v in variants(cfg)]} params={cfg.get('extra_params')}")
     results, others = check(cfg)
-    log("untracked nearby: " + ", ".join(f"{o['name']} [{o['number']}] {o['display']} ({o['quote']})" for o in others))
+    log("untracked nearby: " + ", ".join(f"{o['name']} [{o['number']}] ({o['quote']})" for o in others))
     for r in results:
-        log(f"{r['name']} [{r['number']}] {cfg['part']} '{r['title']}': pickupDisplay={r['display']} "
-            f"quote={r['quote']!r} available={r['available']}")
+        for p in r["variants"]:
+            log(f"{r['name']} [{r['number']}] {p['variant']} '{p['title']}': pickupDisplay={p['display']} "
+                f"quote={p['quote']!r} available={p['available']}")
 
 
 def poll(cfg, config, handoff_from, max_minutes, until=""):
@@ -370,6 +400,7 @@ def poll(cfg, config, handoff_from, max_minutes, until=""):
         to_end = time.monotonic() + (end - datetime.now(timezone.utc)).total_seconds()
         deadline = min(deadline, to_end) if deadline else to_end
     alerted = board.recently_available()
+    board.extra["alerted"] = sorted(alerted)
     results, checked_at = board.previous.get("stores", []), board.previous.get("checked_at")
     # Apple starts answering 541 to a runner IP after roughly an hour of checks, so runs are short
     # and a run that keeps failing hands off early to a fresh runner (usually a new IP).
@@ -405,21 +436,25 @@ def poll(cfg, config, handoff_from, max_minutes, until=""):
                 dispatch_next_run(config, until)
                 return
         if error is None:
-            available = {r["name"] for r in results if r["available"]}
+            available = available_keys(results)
             new, gone = available - alerted, alerted - available
             if new:
                 where = ", ".join(sorted(new))
                 board.event(f"Pickup available: {where}")
+                opened = [v for v in variants(cfg) if any(k == v["name"] or k.endswith(f"({v['name']})") for k in new)
+                          or len(variants(cfg)) == 1]
                 alert(cfg, f"{cfg.get('alert_prefix', '')}{cfg['title']} pickup available: {where}",
-                      f"{cfg['product_name']} shows in-store pickup at **{where}**.")
+                      f"{cfg['product_name']} shows in-store pickup at **{where}**.", opened)
             if gone:
                 board.event(f"Pickup no longer showing: {', '.join(sorted(gone))}")
             alerted = available
+            board.extra["alerted"] = sorted(alerted)
 
             changes = {}
+            touched = {k.split(" (")[0] for k in new | gone}
             for r in results:
                 old_q, new_q = last_quotes.get(r["name"]), r["quote"] or r["display"]
-                if old_q and new_q != old_q and r["name"] not in new | gone:
+                if old_q and new_q != old_q and r["name"] not in touched:
                     changes.setdefault((old_q, new_q), []).append(r["name"])
             for (old_q, new_q), names in changes.items():
                 who = f"All {len(names)} stores" if len(names) == len(results) > 1 else ", ".join(names)

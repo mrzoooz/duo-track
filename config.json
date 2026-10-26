@@ -1,10 +1,21 @@
 {
-  "title": "iPhone Duo 256GB Night Sky",
-  "subtitle": "T-Mobile · Apple Upgrade · AppleCare+ Theft and Loss",
-  "product_name": "iPhone Duo 256GB Night Sky (T-Mobile, Apple Upgrade)",
-  "product_url": "https://www.apple.com/shop/buy-iphone/iphone-duo/7.6-inch-display-256gb-night-sky-t-mobile-apple-upgrade",
-  "checkout_reminder": "Night Sky / 256GB / Apple Upgrade 12-mo lease / T-Mobile / AppleCare+ Theft and Loss, pay annually",
-  "part": "MK1F4LL/A",
+  "title": "iPhone Duo 256GB",
+  "subtitle": "Night Sky or Star White · T-Mobile · Apple Upgrade · AppleCare+ Theft and Loss",
+  "product_name": "iPhone Duo 256GB, Night Sky or Star White (T-Mobile, Apple Upgrade)",
+  "history_id": "iPhone Duo 256GB Night Sky (T-Mobile, Apple Upgrade)",
+  "variants": [
+    {
+      "name": "Night Sky",
+      "part": "MK1F4LL/A",
+      "product_url": "https://www.apple.com/shop/buy-iphone/iphone-duo/7.6-inch-display-256gb-night-sky-t-mobile-apple-upgrade"
+    },
+    {
+      "name": "Star White",
+      "part": "",
+      "product_url": "https://www.apple.com/shop/buy-iphone/iphone-duo/7.6-inch-display-256gb-star-white-t-mobile-apple-upgrade"
+    }
+  ],
+  "checkout_reminder": "256GB / Apple Upgrade 12-mo lease / T-Mobile / AppleCare+ Theft and Loss, pay annually",
   "extra_params": {
     "cppart": "TMOBILE_IPHONEDUO"
   },

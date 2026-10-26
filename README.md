@@ -1,6 +1,7 @@
 # duo-track
 
-Checks Apple Store in-store pickup for **iPhone Duo 256GB Night Sky (T-Mobile, Apple Upgrade)** every 30 seconds at
+Checks Apple Store in-store pickup for **iPhone Duo 256GB in Night Sky or Star White (T-Mobile, Apple Upgrade)** every
+30 seconds at
 South Coast Plaza, Fashion Island, Irvine Spectrum Center, Brea Mall, Los Cerritos and Mission Viejo.
 
 - **Status page:** https://mrzoooz.github.io/duo-track/ (GitHub Pages, `docs/index.html`). Live per-store status,
@@ -12,8 +13,8 @@ South Coast Plaza, Fashion Island, Irvine Spectrum Center, Brea Mall, Los Cerrit
 
 `.github/workflows/track.yml` runs `track.py` on GitHub Actions (free for public repos).
 
-- It reads Apple's `/shop/retail/pickup-message` endpoint for part `MK1F4LL/A`, carrier `TMOBILE_IPHONEDUO`, near
-  92626 (one request per check). That returns the same "Pickup:" line the product page shows. The browser's `/shop/fulfillment-messages`
+- It reads Apple's `/shop/retail/pickup-message` endpoint for each configured variant's part (`variants` in the config;
+  Night Sky is `MK1F4LL/A`), carrier `TMOBILE_IPHONEDUO`, near 92626. One request covers every variant. That returns the same "Pickup:" line the product page shows. The browser's `/shop/fulfillment-messages`
   endpoint answers HTTP 541 to GitHub's servers, so the tracker doesn't use it.
 - After each check it rewrites the JSON in the open issue labeled `tracker-status` ("Tracker status (live)"). The status
   page reads that issue through the public GitHub API, which allows browser requests. Edits to an issue body don't send
