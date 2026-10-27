@@ -242,7 +242,9 @@
     }
 
     const stores = status.stores || [];
-    const open = stores.filter((s) => s.available);
+    // A stopped tracker's last results can be stale, so it never claims pickup is available.
+    const stopped = !!status.stopped_at && !(status.paused_until && Date.parse(status.paused_until) > Date.now());
+    const open = stopped ? [] : stores.filter((s) => s.available);
     // Each store may list several variants (e.g. two colors); older statuses have just one.
     const parts = (s) => s.variants || [{ variant: "", quote: s.quote, display: s.display, available: s.available }];
     const multi = (status.variants || []).length > 1;
@@ -255,6 +257,9 @@
     if (open.length) {
       $("headline").textContent = `Pickup available at ${openSpots.join(", ")}`;
       $("sub").textContent = "Order now and choose in-store pickup.";
+    } else if (stopped) {
+      $("headline").textContent = "Tracker stopped";
+      $("sub").textContent = "It isn't checking Apple. The stores below show its last check.";
     } else {
       const quotes = [...new Set(stores.flatMap((s) => parts(s).map((p) => p.quote)).filter(Boolean))];
       $("headline").textContent = "No pickup yet";
@@ -293,8 +298,8 @@
       : '<li class="empty">No activity yet.</li>';
 
     const age = status.checked_at ? (Date.now() - Date.parse(status.checked_at)) / 1000 : Infinity;
-    if (status.error && !paused) notices.push(`<div class="notice bad">Latest check failed (${esc(status.error)}). Showing the last good result.</div>`);
     const paused = status.paused_until && Date.parse(status.paused_until) > Date.now();
+    if (status.error && !paused) notices.push(`<div class="notice bad">Latest check failed (${esc(status.error)}). Showing the last good result.</div>`);
     if (paused) notices.push(`<div class="notice warn">Tracker paused until ${esc(stamps(status.paused_until))}. It resumes automatically; results above are from its last check.</div>`);
     else if (status.stopped_at) notices.push(`<div class="notice warn">This tracker stopped at ${esc(stamps(status.stopped_at))}. Results above are from its last check.</div>`);
     else if (age > STALE_AFTER_S) notices.push(`<div class="notice warn">The tracker hasn't reported in a while. It may be restarting; this clears on its next check.</div>`);
