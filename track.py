@@ -394,7 +394,6 @@ def probe_cache(cfg):
 
 
 def diagnose(cfg):
-    probe_cache(cfg)
     for v in cfg.get("variants") or [cfg]:
         page = http(v["product_url"])
         title = re.search(r"<title>(.*?)</title>", page, re.S)
@@ -409,6 +408,7 @@ def diagnose(cfg):
             carrier = json.loads(selection.group(1)).get("carrierModel")
             if carrier:
                 cfg.setdefault("extra_params", {})["cppart"] = carrier
+    probe_cache(cfg)
     log(f"checking parts={[v['part'] for v in variants(cfg)]} params={cfg.get('extra_params')}")
     for loc in cfg["search_locations"]:
         for s in fetch_stores(cfg, loc):
