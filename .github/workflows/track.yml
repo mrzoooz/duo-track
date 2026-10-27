@@ -40,6 +40,7 @@ jobs:
       - name: Track pickup availability
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           MODE: ${{ inputs.mode || 'poll' }}
           CONFIG: ${{ inputs.config || 'config.json' }}
           MINUTES: ${{ inputs.minutes || '40' }}

@@ -32,5 +32,6 @@
   ],
   "start": "2026-10-23T00:00:00-07:00",
   "interval_seconds": 30,
-  "error_alert_after": 15
+  "error_alert_after": 15,
+  "ntfy_topic": "duo-m0pce46s79wvjdgl"
 }

@@ -6,8 +6,10 @@ South Coast Plaza, Fashion Island, Irvine Spectrum Center, Brea Mall, Los Cerrit
 
 - **Status page:** https://mrzoooz.github.io/duo-track/ (GitHub Pages, `docs/index.html`). Live per-store status,
   last check time, recent activity, and an optional sound alarm while the page is open.
-- **Alerts:** when a store shows pickup, the tracker opens an issue that @mentions you, so GitHub emails you (and
-  notifies you in the GitHub app if you have it). Nothing to install.
+- **Alerts:** when a store shows pickup, the tracker first sends an instant push through ntfy.sh (subscribe to the
+  config's `ntfy_topic` in the ntfy app; a `NTFY_TOPIC` repo secret overrides it), then opens an issue that @mentions
+  you so GitHub emails you as a backup. GitHub's notification emails have arrived 2–3 minutes after the issue, while
+  pickup slots have lasted 30–90 seconds.
 
 ## How it works
 

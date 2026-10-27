@@ -153,11 +153,27 @@ def github_api(path, payload=None, method="GET"):
     return json.loads(body) if body else {}
 
 
+def push(cfg, title, text, url):
+    """Instant phone push via ntfy.sh (GitHub's notification emails can lag by minutes)."""
+    topic = os.environ.get("NTFY_TOPIC") or cfg.get("ntfy_topic")
+    if not topic:
+        return
+    try:
+        http(f"https://ntfy.sh/{topic}", data=text.encode(), method="POST",
+             headers={"Title": title.encode("ascii", "replace").decode(), "Priority": "urgent",
+                      "Tags": "rotating_light", "Click": url})
+        log("push sent")
+    except Exception as e:
+        log(f"push failed: {describe_error(e)}")
+
+
 def alert(cfg, title, text, vs=None):
-    """Open an issue that @mentions the repo owner, which GitHub delivers by email / GitHub app."""
+    """Push to the phone, then open an issue that @mentions the repo owner (GitHub email / app as backup)."""
     log(f"ALERT: {title}")
     owner = os.environ.get("GITHUB_REPOSITORY_OWNER", "")
     vs = vs or variants(cfg)[:1]
+    push(cfg, title, f"{text.replace('**', '')} Tap to order. Select: {cfg['checkout_reminder']}",
+         vs[0]["product_url"])
     links = " · ".join(f"**[Order {v['name'] or 'now'}]({v['product_url']})**" for v in vs)
     try:
         github_api("issues", method="POST", payload={
