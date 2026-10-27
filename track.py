@@ -355,6 +355,16 @@ def diagnose(cfg):
             if carrier:
                 cfg.setdefault("extra_params", {})["cppart"] = carrier
     log(f"checking parts={[v['part'] for v in variants(cfg)]} params={cfg.get('extra_params')}")
+    for loc in cfg["search_locations"]:
+        for s in fetch_stores(cfg, loc):
+            if any(w.lower() in s.get("storeName", "").lower() for w in cfg["stores"]):
+                hours = "; ".join(f"{h.get('storeDays')} {h.get('storeTimings')}"
+                                  for h in (s.get("storeHours") or {}).get("hours", []))
+                special = "; ".join(f"{h.get('specialDays')} {h.get('specialTimings')}"
+                                    for h in (s.get("specialHours") or {}).get("specialHoursData", []))
+                log(f"store info: {s['storeName']} [{s.get('storeNumber')}] phone {s.get('phoneNumber')} | "
+                    f"{(s.get('address') or {}).get('address2')}, {s.get('city')} | hours: {hours} | "
+                    f"special: {special or 'none'}")
     results, others = check(cfg)
     log("untracked nearby: " + ", ".join(f"{o['name']} [{o['number']}] ({o['quote']})" for o in others))
     for r in results:
