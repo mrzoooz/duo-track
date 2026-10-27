@@ -1,34 +1,20 @@
 {
-  "title": "iPhone Duo 256GB",
-  "subtitle": "Night Sky or Star White · T-Mobile · Apple Upgrade · AppleCare+ Theft and Loss",
-  "product_name": "iPhone Duo 256GB, Night Sky or Star White (T-Mobile, Apple Upgrade)",
-  "history_id": "iPhone Duo 256GB Night Sky (T-Mobile, Apple Upgrade)",
-  "variants": [
-    {
-      "name": "Night Sky",
-      "part": "MK1F4LL/A",
-      "product_url": "https://www.apple.com/shop/buy-iphone/iphone-duo/7.6-inch-display-256gb-night-sky-t-mobile-apple-upgrade"
-    },
-    {
-      "name": "Star White",
-      "part": "MK1E4LL/A",
-      "product_url": "https://www.apple.com/shop/buy-iphone/iphone-duo/7.6-inch-display-256gb-star-white-t-mobile-apple-upgrade"
-    }
-  ],
-  "checkout_reminder": "256GB / Apple Upgrade 12-mo lease / T-Mobile / AppleCare+ Theft and Loss, pay annually",
+  "title": "iPhone 18 Pro Max 256GB Glacier",
+  "subtitle": "Unlocked (connect to any carrier later) · Buy outright · No AppleCare+",
+  "product_name": "iPhone 18 Pro Max 256GB Glacier (unlocked)",
+  "product_url": "https://www.apple.com/shop/buy-iphone/iphone-18-pro/6.9-inch-display-256gb-glacier-unlocked",
+  "part": "MJW74LL/A",
   "extra_params": {
-    "cppart": "TMOBILE_IPHONEDUO"
+    "cppart": "UNLOCKED/US"
   },
+  "checkout_reminder": "256GB / Connect to any carrier later / Buy (pay in full) / No AppleCare+",
   "search_locations": [
     "92626"
   ],
   "stores": [
     "South Coast Plaza",
-    "Fashion Island",
     "Irvine Spectrum Center",
-    "Brea Mall",
-    "Los Cerritos",
-    "Mission Viejo"
+    "Fashion Island"
   ],
   "start": "2026-10-23T00:00:00-07:00",
   "interval_seconds": 20,
