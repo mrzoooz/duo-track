@@ -1,5 +1,8 @@
 # duo-track
 
+**Turned off (Oct 27, 2026).** The watchdog schedule in `.github/workflows/track.yml` is commented out and no
+run is active. To turn it back on, restore the schedule and start a `poll` run (Actions → **track** → **Run workflow**).
+
 Checks Apple Store in-store pickup for **iPhone 18 Pro Max 256GB Glacier (unlocked, buy outright)** every
 10 seconds from 9:00 to 11:30 AM Pacific (when most restocks have landed) and every 20 seconds otherwise, at
 South Coast Plaza, Irvine Spectrum Center and Fashion Island.

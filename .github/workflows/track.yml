@@ -2,8 +2,10 @@ name: track
 run-name: "${{ inputs.mode || 'poll' }} ${{ inputs.config || 'config.json' }}"
 
 on:
-  schedule:
-    - cron: "*/15 * * * *"   # watchdog: starts a tracker run if none is active
+  # Tracker turned off: the watchdog schedule is removed. To turn it back on, restore
+  #   schedule:
+  #     - cron: "*/15 * * * *"   # watchdog: starts a tracker run if none is active
+  # and start a poll run (Actions -> track -> Run workflow).
   workflow_dispatch:
     inputs:
       mode:
