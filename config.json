@@ -31,7 +31,15 @@
     "Mission Viejo"
   ],
   "start": "2026-10-23T00:00:00-07:00",
-  "interval_seconds": 30,
+  "interval_seconds": 20,
+  "fast_windows": [
+    {
+      "from": "09:00",
+      "to": "11:30",
+      "interval_seconds": 10
+    }
+  ],
+  "rotate_after_failures": 2,
   "error_alert_after": 15,
   "ntfy_topic": "duo-m0pce46s79wvjdgl"
 }

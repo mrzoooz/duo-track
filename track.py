@@ -3,7 +3,7 @@
 dashboard (docs/index.html), and alert by GitHub issue (-> email) when pickup opens up.
 
 Modes:
-  poll         check every interval_seconds (default; waits for config "start")
+  poll         check every interval_seconds, faster inside fast_windows (default; waits for config "start")
   once         one check, print a summary, exit
   diagnose     one check with per-store details
   test-alert   open a test alert issue, then one check
@@ -59,6 +59,24 @@ def strip_html(s):
 
 def describe_error(e):
     return f"HTTP {e.code}" if isinstance(e, urllib.error.HTTPError) else repr(e)
+
+
+def current_interval(cfg, now=None):
+    """Seconds between checks right now: the fast_windows entry covering this Pacific time, else interval_seconds."""
+    hm = (now or datetime.now(timezone.utc)).astimezone(PT).strftime("%H:%M")
+    for w in cfg.get("fast_windows", []):
+        if w["from"] <= hm < w["to"]:
+            return w["interval_seconds"]
+    return cfg["interval_seconds"]
+
+
+def schedule_text(cfg):
+    """'every 10 seconds from 9:00 AM to 11:30 AM Pacific, every 20 seconds otherwise'."""
+    def clock(hm):
+        return datetime.strptime(hm, "%H:%M").strftime("%-I:%M %p")
+    parts = [f"every {w['interval_seconds']} seconds from {clock(w['from'])} to {clock(w['to'])} Pacific"
+             for w in cfg.get("fast_windows", [])]
+    return ", ".join(parts + [f"every {cfg['interval_seconds']} seconds" + (" otherwise" if parts else "")])
 
 
 # --- Apple -------------------------------------------------------------------
@@ -198,6 +216,10 @@ class StatusBoard:
         self.previous = {}
         self.events = []
         self.extra = {}
+        self.interval = cfg["interval_seconds"]
+        self.dirty = False  # events added since the last publish
+        self.run_url = (f"{os.environ.get('GITHUB_SERVER_URL')}/{os.environ.get('GITHUB_REPOSITORY')}"
+                        f"/actions/runs/{os.environ.get('GITHUB_RUN_ID')}")
         if not IN_ACTIONS:
             return
         try:
@@ -223,6 +245,19 @@ class StatusBoard:
     def event(self, text):
         log(f"event: {text}")
         self.events = ([{"at": now_iso(), "text": text}] + self.events)[:40]
+        self.dirty = True
+
+    def taken_over(self, since):
+        """True once another run has published to the status issue after `since` (ISO time), i.e. the run
+        this one dispatched is up and checking."""
+        if not IN_ACTIONS or not self.number:
+            return False
+        try:
+            latest = parse_status(github_api(f"issues/{self.number}").get("body") or "")
+        except Exception as e:
+            log(f"status read failed: {describe_error(e)}")
+            return False
+        return latest.get("run_url") != self.run_url and latest.get("updated_at", "") > since
 
     def failure_streak(self):
         """Consecutive failed checks carried over from the previous run, if it handed off just now."""
@@ -241,7 +276,9 @@ class StatusBoard:
             "product_url": variants(self.cfg)[0]["product_url"],
             "variants": [{"name": v["name"], "url": v["product_url"]} for v in variants(self.cfg)],
             "checkout_reminder": self.cfg["checkout_reminder"],
-            "interval_seconds": self.cfg["interval_seconds"],
+            "interval_seconds": self.interval,
+            "publish_every_seconds": self.cfg.get("publish_every_seconds", 30),
+            "schedule": schedule_text(self.cfg),
             "checked_at": checked_at,
             "updated_at": now_iso(),
             "error": error,
@@ -251,11 +288,11 @@ class StatusBoard:
             "stores": results,
             "events": self.events,
             **self.extra,
-            "run_url": (f"{os.environ.get('GITHUB_SERVER_URL')}/{os.environ.get('GITHUB_REPOSITORY')}"
-                        f"/actions/runs/{os.environ.get('GITHUB_RUN_ID')}"),
+            "run_url": self.run_url,
         }
-        body = ("Live data for the duo-track status page, rewritten every minute by the tracker "
+        body = ("Live data for the duo-track status page, rewritten by the tracker as it checks "
                 "(edits here are overwritten).\n\n```json\n" + json.dumps(status, indent=1) + "\n```\n")
+        self.dirty = False
         if not IN_ACTIONS:
             return
         try:
@@ -318,8 +355,10 @@ def dispatch_next_run(config, until):
                        "handoff_from": os.environ["GITHUB_RUN_ID"]},
         })
         log("dispatched next run")
+        return True
     except Exception as e:
-        log(f"dispatch failed (scheduled watchdog will restart): {e}")
+        log(f"dispatch failed: {e}")
+        return False
 
 
 # --- Modes ---------------------------------------------------------------------
@@ -413,10 +452,15 @@ def poll(cfg, config, handoff_from, max_minutes, until=""):
         return (IN_ACTIONS and cfg.get("handoff", True)
                 and (end is None or datetime.now(timezone.utc) < end - timedelta(minutes=1)))
 
-    # Keep each runner under ~max_requests_per_runner Apple requests (one per search location per check).
-    per_runner = max(1, cfg.get("max_requests_per_runner", 40) * cfg["interval_seconds"] / 60
-                     / len(cfg["search_locations"]))
-    max_minutes = min(max_minutes, per_runner) if max_minutes else per_runner
+    # Apple starts answering 541 to a runner's IP after roughly 60 requests, so each run makes at most
+    # max_requests_per_runner (one per search location per check). A few checks before that it starts its
+    # successor on a fresh runner (usually a new IP) and keeps checking until the successor has published,
+    # so there's no gap while the new runner boots.
+    budget = cfg.get("max_requests_per_runner", 40)
+    per_check = len(cfg["search_locations"])
+    lead = cfg.get("handoff_lead_seconds", 20)       # roughly how long a dispatched run takes to start checking
+    wait = cfg.get("handoff_wait_seconds", 90)       # longest to keep checking while the successor is queued
+    publish_every = cfg.get("publish_every_seconds", 30)
 
     board = StatusBoard(cfg)
     if not handoff_from:
@@ -428,8 +472,7 @@ def poll(cfg, config, handoff_from, max_minutes, until=""):
     alerted = board.recently_available()
     board.extra["alerted"] = sorted(alerted)
     results, checked_at = board.previous.get("stores", []), board.previous.get("checked_at")
-    # Apple starts answering 541 to a runner IP after roughly an hour of checks, so runs are short
-    # and a run that keeps failing hands off early to a fresh runner (usually a new IP).
+    # A run that keeps failing hands off early to a fresh runner.
     failures = 0                      # this run
     streak = board.failure_streak()   # across handoffs
     # History only (no email): changes in Apple's message at tracked stores, and untracked nearby stores with pickup.
@@ -437,10 +480,22 @@ def poll(cfg, config, handoff_from, max_minutes, until=""):
     untracked_open = set(board.previous.get("untracked_open", []))
     board.extra["untracked_open"] = sorted(untracked_open)
     last_run_check = time.monotonic()
+    requests = 0
+    dispatched_at = None              # monotonic time the successor was dispatched
+    dispatched_iso = ""
+    last_publish, last_error = None, None
     while True:
         t0 = time.monotonic()
+        interval = current_interval(cfg)
+        if streak >= cfg["error_alert_after"]:
+            interval = max(interval, 300)
+        board.interval = interval
+        if dispatched_at is not None and board.taken_over(dispatched_iso):
+            log("next run is checking; exiting")
+            return
         error = None
         try:
+            requests += per_check
             (results, others), checked_at = check(cfg), now_iso()
             log(summarize(results))
             if streak >= cfg["error_alert_after"]:
@@ -457,10 +512,10 @@ def poll(cfg, config, handoff_from, max_minutes, until=""):
                       f"{streak} checks in a row failed ({error}). Check the Apple Store app manually "
                       "until this recovers.")
             if failures >= cfg.get("rotate_after_failures", 3) and can_continue():
-                board.event(f"Switched to a fresh runner after {error}")
-                board.publish(results, error, checked_at, streak)
-                dispatch_next_run(config, until)
-                return
+                if dispatched_at is not None or dispatch_next_run(config, until):
+                    board.event(f"Switched to a fresh runner after {error}")
+                    board.publish(results, error, checked_at, streak)
+                    return
         if error is None:
             available = available_keys(results)
             new, gone = available - alerted, alerted - available
@@ -498,21 +553,32 @@ def poll(cfg, config, handoff_from, max_minutes, until=""):
                     board.event("Pickup no longer showing at any untracked nearby store")
                 untracked_open = set(open_elsewhere)
                 board.extra["untracked_open"] = sorted(untracked_open)
-        board.publish(results, error, checked_at, streak)
+        # Status edits are throttled (GitHub limits content writes); events and errors publish right away.
+        if (board.dirty or error != last_error or last_publish is None
+                or time.monotonic() - last_publish >= publish_every):
+            board.publish(results, error, checked_at, streak)
+            last_publish, last_error = time.monotonic(), error
 
-        if deadline and time.monotonic() >= deadline:
-            if can_continue():
-                dispatch_next_run(config, until)
-            else:
+        now = time.monotonic()
+        checks_left = (budget - requests) // per_check
+        out_of_time = deadline is not None and now + interval >= deadline
+        if dispatched_at is None and not can_continue():
+            if checks_left <= 0 or out_of_time:
                 board.event("Tracker stopped (scheduled end)")
                 board.publish(results, error, checked_at, streak, stopped=True)
+                return
+        elif dispatched_at is None:
+            if checks_left * interval <= lead or (deadline is not None and now + lead >= deadline):
+                if dispatch_next_run(config, until):
+                    dispatched_at, dispatched_iso = now, now_iso()
+        elif now - dispatched_at >= wait:
+            log("next run hasn't started checking yet; exiting (it will pick up when its runner starts)")
             return
-        if IN_ACTIONS and time.monotonic() - last_run_check >= 600:
-            last_run_check = time.monotonic()
+        if IN_ACTIONS and now - last_run_check >= 600:
+            last_run_check = now
             if should_exit(config, handoff_from):
                 log("an older tracker run is active; exiting")
                 return
-        interval = cfg["interval_seconds"] if streak < cfg["error_alert_after"] else max(cfg["interval_seconds"], 300)
         time.sleep(max(1, interval - (time.monotonic() - t0)))
 
 

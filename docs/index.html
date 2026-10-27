@@ -175,7 +175,7 @@
   </section>
 
   <footer>
-    <p>The tracker checks Apple every 30 seconds from GitHub Actions. When a store shows pickup, GitHub emails you, so you don't need this page open. This page refreshes itself about once a minute, so there's no need to reload it.</p>
+    <p>The tracker runs on GitHub Actions and checks Apple <span id="schedule">every few seconds</span>. When a store shows pickup, it sends an instant push through ntfy, then GitHub emails you as a backup, so you don't need this page open. This page refreshes itself about once a minute, so there's no need to reload it.</p>
     <p><a id="repo-link" href="https://github.com/mrzoooz/duo-track">Repository</a> · <a id="run-link" href="https://github.com/mrzoooz/duo-track/actions">Tracker run log</a></p>
   </footer>
 </main>
@@ -270,6 +270,7 @@
     if (status.title) $("title").textContent = status.title;
     if (status.subtitle !== undefined) $("subtitle").textContent = status.subtitle;
     $("stamps").textContent = status.checked_at ? `Last check: ${stamps(status.checked_at)}` : "";
+    if (status.schedule) $("schedule").textContent = status.schedule;
     if (status.checkout_reminder) $("reminder").textContent = `Select: ${status.checkout_reminder}`;
     if (status.run_url) $("run-link").href = status.run_url;
     const name = status.title || "iPhone Duo";
@@ -320,7 +321,7 @@
       delay = Math.max(delay, (rate.reset - Date.now()) / Math.max(1, rate.remaining - 3));
     }
     if (status?.checked_at) {
-      const untilNextCheck = Date.parse(status.checked_at) + (status.interval_seconds || 60) * 1000 + 5000 - Date.now();
+      const untilNextCheck = Date.parse(status.checked_at) + (status.publish_every_seconds || status.interval_seconds || 60) * 1000 + 5000 - Date.now();
       delay = Math.max(delay, untilNextCheck);
     }
     return Math.min(delay, MAX_REFRESH_MS);
